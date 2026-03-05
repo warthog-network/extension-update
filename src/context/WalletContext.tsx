@@ -183,13 +183,6 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({
       // mnemonic 12 words
       const mnemonic = bip39.generateMnemonic();
 
-      // generate key pair
-      // const ec = new elliptic.ec("secp256k1");
-      // const key = ec.genKeyPair({ entropy: bip39.mnemonicToSeedSync(mnemonic, "account0") });
-      // generate address
-      // console.log("&&&& ec.priv key", key.getPrivate().toString());
-      // console.log("&&&& ec.pubk", key.getPublic().encode("hex", true));
-      // const publicKey = key.getPublic().encode("hex", true);
       const address = HDWallet.fromMnemonic(mnemonic)
         .deriveAccountAtIndex(0)
         .getAddress();
