@@ -215,7 +215,7 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({
   const addAccount = async (name: string | null): Promise<void> => {
     try {
       const index = walletList.length;
-      const address = HDWallet.fromMnemonic(seedPhrase || "")
+      const address = HDWallet.fromMnemonic(seedPhrase!)
         .deriveAccountAtIndex(index)
         .getAddress();
 
@@ -280,7 +280,7 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({
   };
 
   const getAccountFromIndex = (index: number): Account => {
-    return HDWallet.fromMnemonic(seedPhrase || "").deriveAccountAtIndex(index);
+    return HDWallet.fromMnemonic(seedPhrase!).deriveAccountAtIndex(index);
   };
 
   const setSeedPhrase = (seedPhrase: string): void => {
