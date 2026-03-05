@@ -6,7 +6,7 @@ import Header from "../components/Header";
 import useWallet from "../hooks/useWallet";
 import { formatWalletAddress } from "../utils";
 import Jazzicon from "react-jazzicon/dist/Jazzicon";
-import { Account } from "../warthog-ts/types/Account";
+import { Account } from "warthog-ts";
 
 interface AccountType {
   id: number;
@@ -54,7 +54,7 @@ function SendPage() {
   const handelSubmit = () => {
     if (publicAddress === "") {
       setError("Please enter a public address");
-    } else if (!Account.validate_address(publicAddress)) {
+    } else if (!Account.validateAddress(publicAddress)) {
       setError("Invalid address format");
     } else {
       setTmpDestinationWalletState(publicAddress);

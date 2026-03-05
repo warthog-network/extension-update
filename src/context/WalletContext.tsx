@@ -8,8 +8,7 @@ import React, {
 import * as bip39 from "bip39";
 import { getKeyFromPassword, encrypt, decrypt } from "dha-encryption";
 import browser from "webextension-polyfill";
-import { HDWallet } from "../warthog-ts/types/HDWallet";
-import { Account } from "../warthog-ts/types/Account";
+import { HDWallet, Account } from "warthog-ts";
 
 interface WalletContextProps {
   seedPhrase: string | null;
