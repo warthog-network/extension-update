@@ -11,7 +11,7 @@ function ShowPrivateKey() {
     seedPhrase,
     name,
     selectedWalletIndex,
-    getPrivateKeyFromIndex,
+    getAccountFromIndex,
   } = useWallet();
   const navigate = useNavigate();
   const [enteredPassword, setEnteredPassword] = useState("");
@@ -84,7 +84,7 @@ function ShowPrivateKey() {
           <p className="text-white text-sm">Private Key</p>
           <div className="px-3 py-3 rounded-lg border border-[#fdb913]/25 backdrop-blur-md flex items-center w-[400px]">
             <div className="text-white text-lg w-full break-words">
-              {getPrivateKeyFromIndex(selectedWalletIndex)}
+              {getAccountFromIndex(selectedWalletIndex).getPrivateKeyHex()}
             </div>
           </div>
 

@@ -6,9 +6,10 @@ import React, {
   useCallback,
 } from "react";
 import * as bip39 from "bip39";
-import { ethers } from "ethers";
 import { getKeyFromPassword, encrypt, decrypt } from "dha-encryption";
 import browser from "webextension-polyfill";
+import { HDWallet } from "../warthog-ts/types/HDWallet";
+import { Account } from "../warthog-ts/types/Account";
 
 interface WalletContextProps {
   seedPhrase: string | null;
@@ -52,7 +53,7 @@ interface WalletContextProps {
   setSelectedNodeIndexState: (selectedNodeIndex: number) => void;
   setVisibleWalletListState: (visibleWalletList: boolean[]) => void;
   setTmpDestinationWalletState: (tmpDestinationWallet: string) => void;
-  getPrivateKeyFromIndex: (index: number) => string;
+  getAccountFromIndex: (index: number) => Account;
 }
 
 const defaultNodeList = [
@@ -189,16 +190,9 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({
       // console.log("&&&& ec.priv key", key.getPrivate().toString());
       // console.log("&&&& ec.pubk", key.getPublic().encode("hex", true));
       // const publicKey = key.getPublic().encode("hex", true);
-      const rootNode = ethers.HDNodeWallet.fromPhrase(
-        mnemonic,
-        "",
-        "m/44'/2070'/0",
-      );
-      const childNode = rootNode.derivePath("0/0");
-      const sha256 = ethers.sha256(childNode.publicKey).slice(2);
-      const ripemd160 = ethers.ripemd160("0x" + sha256).slice(2);
-      const checksum = ethers.sha256("0x" + ripemd160).slice(2, 10);
-      const address = ripemd160 + checksum;
+      const address = HDWallet.fromMnemonic(mnemonic)
+        .deriveAccountAtIndex(0)
+        .getAddress();
 
       // save to storage
       setSeedPhrase(mnemonic);
@@ -220,17 +214,10 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({
 
   const addAccount = async (name: string | null): Promise<void> => {
     try {
-      const rootNode = ethers.HDNodeWallet.fromPhrase(
-        seedPhrase || "",
-        "",
-        "m/44'/2070'/0",
-      );
       const index = walletList.length;
-      const childNode = rootNode.derivePath(`0/${index}`);
-      const sha256 = ethers.sha256(childNode.publicKey).slice(2);
-      const ripemd160 = ethers.ripemd160("0x" + sha256).slice(2);
-      const checksum = ethers.sha256("0x" + ripemd160).slice(2, 10);
-      const address = ripemd160 + checksum;
+      const address = HDWallet.fromMnemonic(seedPhrase || "")
+        .deriveAccountAtIndex(index)
+        .getAddress();
 
       // save to storage
       setWallet(address);
@@ -253,16 +240,9 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({
     const mnemonic = seedPhrase;
 
     // generate key pair
-    const rootNode = ethers.HDNodeWallet.fromPhrase(
-      mnemonic,
-      "",
-      "m/44'/2070'/0",
-    );
-    const childNode = rootNode.derivePath("0/0");
-    const sha256 = ethers.sha256(childNode.publicKey).slice(2);
-    const ripemd160 = ethers.ripemd160("0x" + sha256).slice(2);
-    const checksum = ethers.sha256("0x" + ripemd160).slice(2, 10);
-    const address = ripemd160 + checksum;
+    const address = HDWallet.fromMnemonic(mnemonic)
+      .deriveAccountAtIndex(0)
+      .getAddress();
     console.log("***** address", address);
 
     // save to storage
@@ -299,14 +279,8 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({
       });
   };
 
-  const getPrivateKeyFromIndex = (index: number): string => {
-    const rootNode = ethers.HDNodeWallet.fromPhrase(
-      seedPhrase || "",
-      "",
-      "m/44'/2070'/0",
-    );
-    const childNode = rootNode.derivePath(`0/${index}`);
-    return childNode.privateKey.slice(2);
+  const getAccountFromIndex = (index: number): Account => {
+    return HDWallet.fromMnemonic(seedPhrase || "").deriveAccountAtIndex(index);
   };
 
   const setSeedPhrase = (seedPhrase: string): void => {
@@ -472,7 +446,7 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({
         setSelectedNodeIndexState,
         setVisibleWalletListState,
         setTmpDestinationWalletState,
-        getPrivateKeyFromIndex,
+        getAccountFromIndex,
         importWallet,
         setInputWordsBackup,
       }}
