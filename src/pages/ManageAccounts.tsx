@@ -22,20 +22,19 @@ function ManageAccounts() {
     setWallet,
     setSelectedWalletIndex,
     addAccount,
+    canAddAccounts,
+    setPrivateKey,
+    getAccountFromIndex,
   } = useWallet();
 
   const [accounts, setAccounts] = useState<AccountType[]>([] as AccountType[]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [isDialogOpen, setIsDialogOpen] = useState(false); // State for dialog visibility
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [newAccountName, setNewAccountName] = useState("");
 
   const handleAddAccount = () => {
-    // Logic to add the new account
-    console.log("Adding account:", newAccountName);
-
+    if (!canAddAccounts) return;
     addAccount(newAccountName.length ? newAccountName : null);
-
-    // Reset the input and close the dialog
     setNewAccountName("");
     setIsDialogOpen(false);
   };
@@ -53,10 +52,14 @@ function ManageAccounts() {
   );
 
   const setPrimaryAccount = (id: number) => {
-    console.log("Primary Account Set");
     setName(nameList[id]);
     setWallet(walletList[id]);
     setSelectedWalletIndex(id);
+    try {
+      setPrivateKey(getAccountFromIndex(id).getPrivateKeyHex());
+    } catch {
+      // ignore
+    }
   };
 
   // const removeAccount = (id: number) => {
@@ -118,14 +121,21 @@ function ManageAccounts() {
         )}
       </div>
       <div className="absolute bottom-3 w-full left-0 px-4">
-        <Button
-          variant="primary"
-          ariaLabel="Add Account"
-          onClick={() => setIsDialogOpen(true)}
-          className="w-full"
-        >
-          + Add more account
-        </Button>
+        {canAddAccounts ? (
+          <Button
+            variant="primary"
+            ariaLabel="Add Account"
+            onClick={() => setIsDialogOpen(true)}
+            className="w-full"
+          >
+            + Add more account
+          </Button>
+        ) : (
+          <p className="text-white/40 text-xs text-center">
+            Private-key wallets have a single account. Import a seed phrase to
+            use multiple accounts.
+          </p>
+        )}
       </div>
 
       {/* Popup Dialog */}

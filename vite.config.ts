@@ -15,7 +15,7 @@ export default defineConfig({
       ],
     }),
     nodePolyfills({
-      include: ["buffer"],
+      include: ["buffer", "crypto", "stream", "util"],
       globals: {
         Buffer: true,
         process: true,
@@ -23,12 +23,30 @@ export default defineConfig({
       },
     }),
   ],
+  resolve: {
+    alias: {
+      // warthog-js TransactionContext uses node crypto.createHash
+      crypto: "crypto-browserify",
+    },
+  },
+  optimizeDeps: {
+    include: [
+      "warthog-ts",
+      "warthog-js",
+      "buffer",
+      "elliptic",
+      "crypto-browserify",
+    ],
+  },
   build: {
     outDir: "build",
     rollupOptions: {
       input: {
         main: "./index.html",
       },
+    },
+    commonjsOptions: {
+      transformMixedEsModules: true,
     },
   },
 });

@@ -11,7 +11,11 @@ The **Warthog Wallet Extension** is a feature-rich browser extension for seamles
 - **⚡ Modern Tech Stack**: Built with **React.js 18.3.1** and **TypeScript** for a robust and scalable architecture.
 - **🎨 Tailwind CSS**: Ensures a sleek and responsive design for all screen sizes.
 - **🔒 Secure**: Optimized for privacy and secure data handling.
-- **🌐 Web3 Ready**: Compatible with decentralized applications in the Warthog ecosystem.
+- **🌐 Mainnet + DeFi testnet**: Official mainnet node (same as website webwallet) plus DeFi testnet presets from wartbunker (`wart_balance`, dual transfer payloads).
+- **🧪 DeFi hub (testnet)**: Assets (watch/create/send/search), DEX (limit orders, LP deposit/withdraw, market), open orders + cancel, fake mine — core wartbunker functions when a DeFi node is selected.
+- **📜 Activity**: Account history from the connected node (when supported).
+- **💱 USD price**: Multi-source WART price with cache (CoinGecko → CoinPaprika).
+- **🔑 Website-compatible login**: Create, seed derive, private key, saved wallet, wallet file.
 - **📱 Fully Responsive**: Offers a seamless experience across devices.
 
 ---

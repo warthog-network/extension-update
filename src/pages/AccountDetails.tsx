@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import useWallet from "../hooks/useWallet";
 import Jazzicon from "react-jazzicon/dist/Jazzicon";
 import { QRCodeSVG } from "qrcode.react";
+import { encryptWallet } from "../utils/warthogWalletCrypto";
 
 function IconButton({
   iconSrc,
@@ -40,13 +41,70 @@ function useDebounce(value: string | null, delay: number): string | null {
 }
 
 function AccountDetails() {
-  const { wallet, name, nameList, setNameList, selectedWalletIndex, setName } =
-    useWallet();
+  const {
+    wallet,
+    name,
+    nameList,
+    setNameList,
+    selectedWalletIndex,
+    setName,
+    password,
+    saveCurrentAsNamedWallet,
+    seedPhrase,
+    getAccountFromIndex,
+  } = useWallet();
   const [copyLabel, setCopyLabel] = useState("Copy");
   const [isEditing, setIsEditing] = useState(false);
   const [tempName, setTempName] = useState<string | null>(name);
   const debouncedName = useDebounce(tempName, 1000);
   const navigate = useNavigate();
+  const [saveName, setSaveName] = useState(name || "My Wallet");
+  const [saveMsg, setSaveMsg] = useState<string | null>(null);
+  const [saveErr, setSaveErr] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const handleSaveNamed = async () => {
+    if (!password) {
+      setSaveErr("Unlock password missing — re-open the wallet");
+      return;
+    }
+    setSaving(true);
+    setSaveErr(null);
+    setSaveMsg(null);
+    try {
+      await saveCurrentAsNamedWallet(saveName.trim(), password);
+      setSaveMsg(`Saved as "${saveName.trim()}" for quick login`);
+    } catch (e) {
+      setSaveErr(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDownloadFile = () => {
+    if (!password || !wallet) return;
+    try {
+      const account = getAccountFromIndex(selectedWalletIndex);
+      const encrypted = encryptWallet(
+        {
+          privateKey: account.getPrivateKeyHex(),
+          publicKey: account.getPublicKeyHex(),
+          address: account.getAddress(),
+          mnemonic: seedPhrase || undefined,
+        },
+        password,
+      );
+      const blob = new Blob([encrypted], { type: "text/plain" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "warthog_wallet.txt";
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setSaveErr(e instanceof Error ? e.message : "Download failed");
+    }
+  };
 
   const handleCopyAddress = () => {
     if (wallet) {
@@ -156,7 +214,31 @@ function AccountDetails() {
         />
       </div>
 
-      <div className="w-full absolute bottom-3 left-0 px-3">
+      <div className="mt-6 px-1 grid gap-2">
+        <p className="text-white text-sm font-medium">Save for quick login</p>
+        <input
+          type="text"
+          value={saveName}
+          onChange={(e) => setSaveName(e.target.value)}
+          placeholder="Wallet name"
+          className="w-full bg-primary/10 text-white border border-primary/50 rounded-lg px-3 py-2 text-sm"
+        />
+        <Button
+          className="w-full"
+          variant="outline"
+          onClick={handleSaveNamed}
+          disabled={saving || !saveName.trim()}
+        >
+          {saving ? "Saving…" : "Save named wallet"}
+        </Button>
+        <Button className="w-full" variant="outline" onClick={handleDownloadFile}>
+          Download warthog_wallet.txt
+        </Button>
+        {saveMsg && <p className="text-emerald-400 text-xs">{saveMsg}</p>}
+        {saveErr && <p className="text-red-400 text-xs">{saveErr}</p>}
+      </div>
+
+      <div className="w-full mt-4 px-3 pb-4">
         <Button className="w-full" onClick={() => navigate("/private-key")}>
           Show Private Key
         </Button>

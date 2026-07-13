@@ -1,0 +1,1100 @@
+/* DeFi styles — mobile-wallet defiStyles.ts (slightly simplified for extension popup) */
+
+:root {
+  --defi-bg: #09090b;
+  --defi-card: #18181b;
+  --defi-card-muted: rgba(24, 24, 27, 0.6);
+  --defi-header: rgba(24, 24, 27, 0.8);
+  --defi-inset: rgba(9, 9, 11, 0.8);
+  --defi-border: #3f3f46;
+  --defi-border-muted: #27272a;
+  --defi-muted: #71717a;
+  --defi-secondary: #a1a1aa;
+  --defi-gold: #fdb913;
+  --defi-gold-hover: #e79300;
+  --defi-blue: #60a5fa;
+  --defi-blue-text: #93c5fd;
+  --defi-blue-muted: rgba(59, 130, 246, 0.1);
+  --defi-blue-border: rgba(59, 130, 246, 0.2);
+  --defi-purple: #a78bfa;
+  --defi-purple-text: #c4b5fd;
+  --defi-purple-muted: rgba(168, 85, 247, 0.15);
+  --defi-purple-border: rgba(168, 85, 247, 0.2);
+  --defi-amber: #fbbf24;
+  --defi-amber-text: #fbbf24;
+  --defi-buy: #34d399;
+  --defi-buy-muted: rgba(52, 211, 153, 0.15);
+  --defi-sell: #fb7185;
+  --defi-sell-muted: rgba(251, 113, 133, 0.15);
+  --defi-text: #ffffff;
+  --defi-lp-bg: rgba(245, 158, 11, 0.1);
+  --defi-lp-border: rgba(245, 158, 11, 0.45);
+}
+
+.defi-page {
+  background: var(--defi-bg);
+  color: var(--defi-text);
+  min-height: 100%;
+  padding-bottom: 1.25rem;
+}
+
+/* ── Hero ── */
+.defi-hero {
+  background: var(--defi-card);
+  border: 1px solid var(--defi-border);
+  border-radius: 16px;
+  margin-bottom: 0.65rem;
+  overflow: hidden;
+}
+.defi-hero-body {
+  padding: 0.85rem 1rem;
+}
+.defi-hero-label {
+  color: var(--defi-muted);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1.4px;
+}
+.defi-hero-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.2rem;
+}
+.defi-hero-balance {
+  font-size: 1.65rem;
+  font-weight: 600;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+.defi-hero-unit {
+  color: var(--defi-gold);
+  font-size: 0.8rem;
+  font-weight: 600;
+  margin-left: 0.3rem;
+}
+.defi-hero-usd {
+  color: var(--defi-secondary);
+  font-size: 0.8rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  margin-top: 0.2rem;
+}
+.defi-hero-node {
+  color: var(--defi-muted);
+  font-size: 0.65rem;
+  margin-top: 0.3rem;
+}
+.defi-hero-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.75rem;
+  flex-wrap: wrap;
+}
+.defi-addr {
+  flex: 1;
+  min-width: 0;
+  color: var(--defi-secondary);
+  font-size: 0.65rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  text-align: center;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Gold nav (mobile DefiNavTabs) ── */
+.defi-tab-bar {
+  display: flex;
+  gap: 3px;
+  overflow-x: auto;
+  background: var(--defi-bg);
+  border: 1px solid var(--defi-border-muted);
+  border-radius: 14px;
+  padding: 3px;
+  margin-bottom: 0.65rem;
+  scrollbar-width: none;
+}
+.defi-tab-bar::-webkit-scrollbar {
+  display: none;
+}
+.defi-tab {
+  flex-shrink: 0;
+  padding: 0.3rem 0.55rem;
+  border-radius: 8px;
+  background: rgba(39, 39, 42, 0.9);
+  border: 1px solid rgba(82, 82, 91, 0.5);
+  color: var(--defi-secondary);
+  font-size: 0.65rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  min-height: 28px;
+}
+.defi-tab-active {
+  background: var(--defi-gold-hover);
+  border-color: var(--defi-gold-hover);
+  color: #fff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+/* ── Sections ── */
+.defi-section {
+  background: var(--defi-bg);
+  border: 1px solid var(--defi-border);
+  border-radius: 16px;
+  margin-bottom: 0.65rem;
+  overflow: hidden;
+}
+.defi-section-header {
+  padding: 0.65rem 0.75rem;
+  background: var(--defi-header);
+  border-bottom: 1px solid var(--defi-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+}
+.defi-section-header-left {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+}
+.defi-section-title {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1.1px;
+}
+.defi-section-title-assets {
+  color: var(--defi-blue);
+}
+.defi-section-title-orders {
+  color: var(--defi-purple);
+}
+.defi-section-title-liquidity {
+  color: var(--defi-amber-text);
+}
+.defi-section-title-dex {
+  color: var(--defi-gold);
+}
+.defi-section-title-send {
+  color: var(--defi-gold-hover);
+}
+.defi-section-body {
+  padding: 0.75rem;
+}
+.defi-section-footer {
+  border-top: 1px solid var(--defi-border-muted);
+  padding-top: 0.65rem;
+  margin-top: 0.5rem;
+}
+
+/* ── Badges ── */
+.defi-badge {
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  border: 1px solid;
+}
+.defi-badge-blue {
+  color: var(--defi-blue-text);
+  background: var(--defi-blue-muted);
+  border-color: var(--defi-blue-border);
+}
+.defi-badge-purple {
+  color: var(--defi-purple-text);
+  background: var(--defi-purple-muted);
+  border-color: var(--defi-purple-border);
+}
+.defi-badge-amber {
+  color: var(--defi-amber-text);
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(245, 158, 11, 0.25);
+}
+
+/* ── Cards ── */
+.defi-card {
+  background: var(--defi-card-muted);
+  border: 1px solid var(--defi-border-muted);
+  border-radius: 12px;
+  padding: 0.7rem;
+  margin-bottom: 0.45rem;
+}
+.defi-card-inset {
+  background: var(--defi-card);
+  border: 1px solid var(--defi-border);
+  border-radius: 12px;
+  padding: 0.7rem;
+  margin-top: 0.65rem;
+}
+.defi-card-title {
+  color: var(--defi-text);
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+.defi-card-sub {
+  color: var(--defi-muted);
+  font-size: 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  margin-top: 2px;
+  word-break: break-all;
+}
+.defi-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+}
+.defi-balance {
+  color: var(--defi-text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.85rem;
+  text-align: right;
+}
+.defi-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  font-weight: 700;
+  font-size: 0.85rem;
+  flex-shrink: 0;
+  color: #fff;
+}
+.defi-avatar-blue {
+  background: #2563eb;
+}
+.defi-avatar-purple {
+  background: #7c3aed;
+}
+.defi-avatar-amber {
+  background: #d97706;
+}
+
+/* ── Buttons / inputs ── */
+.defi-label {
+  color: var(--defi-secondary);
+  font-size: 0.7rem;
+  margin-bottom: 0.2rem;
+  display: block;
+}
+.defi-input {
+  width: 100%;
+  background: var(--defi-card);
+  color: var(--defi-text);
+  padding: 0.55rem 0.65rem;
+  border-radius: 10px;
+  border: 1px solid var(--defi-border);
+  margin-bottom: 0.45rem;
+  font-size: 0.8rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  outline: none;
+  box-sizing: border-box;
+}
+.defi-input:focus {
+  border-color: var(--defi-gold);
+}
+.defi-btn-gold {
+  padding: 0.3rem 0.6rem;
+  background: rgba(231, 147, 0, 0.12);
+  border: 1px solid rgba(231, 147, 0, 0.6);
+  border-radius: 8px;
+  color: var(--defi-gold-hover);
+  font-size: 0.65rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.defi-btn-primary {
+  width: 100%;
+  padding: 0.45rem 0.75rem;
+  background: rgba(231, 147, 0, 0.15);
+  border: 1px solid rgba(231, 147, 0, 0.65);
+  border-radius: 8px;
+  color: var(--defi-gold-hover);
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 0.25rem;
+}
+.defi-btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.defi-compact-btn {
+  padding: 0.28rem 0.55rem;
+  border-radius: 8px;
+  background: rgba(39, 39, 42, 0.8);
+  border: 1px solid rgba(82, 82, 91, 0.5);
+  color: var(--defi-secondary);
+  font-size: 0.65rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.defi-compact-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.defi-compact-btn-active {
+  background: rgba(231, 147, 0, 0.12);
+  border-color: rgba(231, 147, 0, 0.6);
+  color: var(--defi-gold-hover);
+}
+.defi-compact-btn-accent {
+  color: var(--defi-blue);
+}
+.defi-compact-btn-buy {
+  border-color: rgba(52, 211, 153, 0.45);
+  color: var(--defi-buy);
+}
+.defi-compact-btn-sell {
+  border-color: rgba(251, 113, 133, 0.45);
+  color: var(--defi-sell);
+}
+.defi-danger {
+  border-color: rgba(127, 29, 29, 0.55) !important;
+  color: #ff6b6b !important;
+}
+.defi-btn-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.45rem;
+}
+.defi-btn-row .defi-compact-btn {
+  flex: 1;
+  min-width: 72px;
+  text-align: center;
+}
+
+/* ── Order groups (mobile orderGroup*) ── */
+.defi-order-group {
+  background: var(--defi-card);
+  border: 1px solid var(--defi-border);
+  border-radius: 12px;
+  margin-top: 0.65rem;
+  overflow: hidden;
+}
+.defi-order-group-header {
+  padding: 0.65rem;
+  background: rgba(39, 39, 42, 0.5);
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.defi-order-group-header-open {
+  border-bottom: 1px solid var(--defi-border);
+}
+.defi-order-group-top {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+}
+.defi-order-group-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+}
+.defi-chevron {
+  color: var(--defi-muted);
+  font-size: 12px;
+  width: 12px;
+  flex-shrink: 0;
+}
+.defi-order-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  align-items: center;
+}
+.defi-meta-badge {
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: var(--defi-inset);
+  border: 1px solid rgba(63, 63, 70, 0.6);
+  color: var(--defi-muted);
+  font-size: 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+.defi-meta-badge-purple {
+  background: var(--defi-purple-muted);
+  border-color: var(--defi-purple-border);
+  color: var(--defi-purple-text);
+}
+.defi-order-group-body {
+  padding: 0.65rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+/* Buy / Sell subsections */
+.defi-order-subhead {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.4rem;
+  padding: 0 2px;
+}
+.defi-order-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+.defi-order-dot-buy {
+  background: var(--defi-buy);
+}
+.defi-order-dot-sell {
+  background: var(--defi-sell);
+}
+.defi-order-sub-title {
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 1.1px;
+  text-transform: uppercase;
+}
+.defi-order-sub-title-buy {
+  color: var(--defi-buy);
+}
+.defi-order-sub-title-sell {
+  color: var(--defi-sell);
+}
+.defi-order-sub-count {
+  font-size: 0.65rem;
+}
+.defi-order-sub-count-buy {
+  color: rgba(52, 211, 153, 0.7);
+}
+.defi-order-sub-count-sell {
+  color: rgba(251, 113, 133, 0.7);
+}
+
+.defi-order-card {
+  background: var(--defi-card);
+  border: 1px solid var(--defi-border);
+  border-radius: 10px;
+  padding: 0.65rem;
+  margin-top: 0.4rem;
+}
+.defi-order-badge {
+  font-size: 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+.defi-order-badge-buy {
+  color: var(--defi-buy);
+  background: var(--defi-buy-muted);
+}
+.defi-order-badge-sell {
+  color: var(--defi-sell);
+  background: var(--defi-sell-muted);
+}
+.defi-order-label {
+  color: var(--defi-secondary);
+  font-size: 0.65rem;
+}
+.defi-order-value {
+  color: var(--defi-text);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+.defi-progress-track {
+  height: 6px;
+  background: var(--defi-border-muted);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-top: 4px;
+}
+.defi-progress-fill-buy {
+  height: 100%;
+  background: var(--defi-buy);
+  border-radius: 999px;
+}
+.defi-progress-fill-sell {
+  height: 100%;
+  background: var(--defi-sell);
+  border-radius: 999px;
+}
+.defi-order-tx {
+  border-top: 1px solid var(--defi-border);
+  margin-top: 0.45rem;
+  padding-top: 0.45rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem;
+}
+.defi-order-tx-hash {
+  color: var(--defi-purple);
+  font-size: 0.65rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  cursor: pointer;
+}
+
+/* ── Stats / LP ── */
+.defi-stat-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 0.4rem;
+  margin-top: 0.55rem;
+}
+.defi-stat-box {
+  background: var(--defi-inset);
+  border: 1px solid var(--defi-border-muted);
+  border-radius: 8px;
+  padding: 0.5rem;
+  min-width: 0;
+}
+.defi-stat-label {
+  color: var(--defi-muted);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.7px;
+  margin-bottom: 3px;
+}
+.defi-stat-value {
+  color: var(--defi-text);
+  font-size: 0.8rem;
+  font-weight: 600;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  word-break: break-all;
+}
+.defi-lp-shares {
+  background: var(--defi-lp-bg);
+  border: 1px solid var(--defi-lp-border);
+  border-radius: 14px;
+  padding: 0.85rem;
+  margin-bottom: 0.65rem;
+}
+.defi-lp-shares-label {
+  color: var(--defi-amber-text);
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+.defi-lp-shares-value {
+  color: var(--defi-text);
+  font-size: 1.75rem;
+  font-weight: 600;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  margin-top: 0.2rem;
+}
+.defi-lp-shares-footer {
+  border-top: 1px solid rgba(245, 158, 11, 0.25);
+  margin-top: 0.55rem;
+  padding-top: 0.45rem;
+  color: rgba(251, 191, 36, 0.75);
+  font-size: 10px;
+}
+
+/* ── Encoder / misc ── */
+.defi-encoder {
+  background: var(--defi-inset);
+  border: 1px solid var(--defi-border-muted);
+  border-radius: 12px;
+  padding: 0.65rem;
+  margin-bottom: 0.65rem;
+}
+.defi-encoder-title {
+  color: var(--defi-secondary);
+  font-size: 0.7rem;
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+.defi-encoder-hint {
+  color: var(--defi-muted);
+  font-size: 10px;
+  margin-bottom: 0.4rem;
+}
+.defi-encoder-result {
+  color: var(--defi-buy);
+  font-size: 0.7rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-weight: 600;
+}
+.defi-empty {
+  color: var(--defi-muted);
+  font-size: 0.8rem;
+  text-align: center;
+  padding: 0.55rem 0;
+}
+.defi-hint {
+  color: var(--defi-muted);
+  font-size: 11px;
+  text-align: center;
+  margin-top: 0.45rem;
+}
+.defi-error {
+  color: #ff6b6b;
+  font-size: 0.7rem;
+  margin: 0.35rem 0;
+  word-break: break-word;
+}
+.defi-success {
+  color: #4caf50;
+  font-size: 0.7rem;
+  margin: 0.35rem 0;
+  word-break: break-word;
+}
+.defi-subtabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-bottom: 0.55rem;
+}
+.defi-field-row {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+.defi-field-row > * {
+  flex: 1;
+  min-width: 90px;
+}
+.defi-refresh {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 7px;
+  background: rgba(39, 39, 42, 0.8);
+  border-radius: 8px;
+  border: 1px solid rgba(82, 82, 91, 0.5);
+  color: var(--defi-secondary);
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.defi-pre {
+  margin-top: 0.4rem;
+  font-size: 10px;
+  color: var(--defi-secondary);
+  background: rgba(0, 0, 0, 0.4);
+  padding: 0.45rem;
+  border-radius: 8px;
+  max-height: 8rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.defi-check-row {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-bottom: 0.5rem;
+  cursor: pointer;
+  color: var(--defi-secondary);
+  font-size: 0.75rem;
+}
+.defi-check {
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--defi-border);
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+.defi-check-on {
+  background: var(--defi-gold-hover);
+  border-color: var(--defi-gold-hover);
+}
+
+/* ── Chart ── */
+.defi-chart-shell {
+  background: var(--defi-inset);
+  border: 1px solid var(--defi-border-muted);
+  border-radius: 12px;
+  padding: 0.65rem;
+  margin-top: 0.45rem;
+}
+.defi-chart-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+.defi-chart-title {
+  color: var(--defi-secondary);
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+.defi-chart-interval {
+  color: var(--defi-muted);
+  font-weight: 500;
+}
+.defi-chart-price {
+  color: var(--defi-text);
+  font-size: 1.1rem;
+  font-weight: 600;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  margin-top: 2px;
+}
+.defi-chart-unit {
+  color: var(--defi-gold);
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+.defi-chart-change {
+  font-size: 0.85rem;
+  font-weight: 700;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+.defi-chart-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  margin-top: 0.25rem;
+}
+.defi-chart-footer {
+  display: flex;
+  justify-content: space-between;
+  color: var(--defi-muted);
+  font-size: 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  margin-top: 0.25rem;
+}
+.defi-chart-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 10px;
+  color: var(--defi-muted);
+  margin-bottom: 0.2rem;
+}
+.defi-chart-note {
+  color: #c4b5fd;
+  line-height: 1.35;
+}
+.defi-chart-hover {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.85rem;
+  margin-top: 0.35rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 8px;
+  border: 1px solid var(--defi-border-muted);
+  background: rgba(24, 24, 27, 0.9);
+  font-size: 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: var(--defi-muted);
+}
+.defi-chart-hover-price {
+  color: var(--defi-gold);
+  font-weight: 600;
+}
+
+/* ── Asset drag reorder ── */
+.defi-card-draggable {
+  transition: border-color 0.15s, opacity 0.15s, background 0.15s;
+}
+.defi-card-dragging {
+  opacity: 0.45;
+  border-color: rgba(167, 139, 250, 0.55) !important;
+}
+.defi-card-drop-target {
+  border-color: rgba(167, 139, 250, 0.85) !important;
+  background: rgba(76, 29, 149, 0.18);
+}
+.defi-drag-grip {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 0.15rem;
+  border-radius: 8px;
+  border: 1px solid var(--defi-border-muted);
+  background: rgba(39, 39, 42, 0.85);
+  color: #a1a1aa;
+  cursor: grab;
+  padding: 0;
+}
+.defi-drag-grip:active {
+  cursor: grabbing;
+  color: var(--defi-gold);
+  border-color: rgba(253, 185, 19, 0.45);
+}
+.defi-drag-dots {
+  display: grid;
+  grid-template-columns: repeat(2, 3px);
+  gap: 2px;
+}
+.defi-drag-dots span {
+  width: 3px;
+  height: 3px;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0.85;
+}
+.defi-swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  margin-right: 4px;
+  vertical-align: middle;
+}
+
+/* ── Mainnet / home balance hero (mobile DefiBalanceHero) ── */
+.main-home-card {
+  width: 100%;
+  padding: 0.75rem;
+  background: rgba(24, 24, 27, 0.75);
+  border: 1px solid #3f3f46;
+  border-radius: 16px;
+  backdrop-filter: blur(9px);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.55rem;
+  /* Let settings menu (portaled) and any absolute UI overflow the card */
+  overflow: visible;
+  position: relative;
+  z-index: 1;
+}
+.main-balance-hero {
+  width: 100%;
+  padding: 0.85rem 0.9rem;
+  background: #18181b;
+  border: 1px solid #3f3f46;
+  border-radius: 14px;
+  position: relative;
+  z-index: 0;
+  overflow: hidden;
+}
+.main-balance-hero::before {
+  content: "";
+  position: absolute;
+  top: -2.5rem;
+  right: -2.5rem;
+  width: 7rem;
+  height: 7rem;
+  border-radius: 999px;
+  background: rgba(253, 185, 19, 0.08);
+  filter: blur(28px);
+  pointer-events: none;
+}
+.main-balance-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.25rem;
+  position: relative;
+}
+.main-balance-label {
+  color: #71717a;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1.4px;
+}
+.main-balance-refresh {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.2rem 0.45rem;
+  font-size: 10px;
+  font-weight: 600;
+  color: #a1a1aa;
+  background: rgba(39, 39, 42, 0.9);
+  border: 1px solid rgba(82, 82, 91, 0.5);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.main-balance-refresh:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+.main-balance-row {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  position: relative;
+}
+.main-balance-value {
+  color: #fff;
+  font-size: 1.65rem;
+  font-weight: 600;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  word-break: break-all;
+}
+.main-balance-unit {
+  color: #fdb913;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+.main-balance-usd {
+  color: #a1a1aa;
+  font-size: 0.8rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  margin-top: 0.2rem;
+  position: relative;
+}
+.main-balance-node {
+  color: #71717a;
+  font-size: 0.65rem;
+  margin-top: 0.35rem;
+  position: relative;
+}
+
+/* ── Transaction history (mobile TransactionHistory) ── */
+.tx-history-section {
+  width: 100%;
+  margin-top: 0.75rem;
+}
+.tx-section-label {
+  font-size: 0.7rem;
+  color: #60a5fa;
+  font-weight: 600;
+  margin-bottom: 0.35rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.tx-section-title {
+  font-size: 0.95rem;
+  color: #fdb913;
+  font-weight: 600;
+  margin: 0.55rem 0 0.2rem;
+}
+.tx-network-note {
+  color: #71717a;
+  font-size: 11px;
+  margin-bottom: 0.45rem;
+}
+.tx-reward-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 0.45rem;
+}
+.tx-reward-pill {
+  background: rgba(9, 9, 11, 0.8);
+  padding: 0.2rem 0.55rem;
+  border-radius: 8px;
+  border: 1px solid #27272a;
+  color: #a1a1aa;
+  font-size: 10px;
+  font-weight: 600;
+}
+.tx-btn-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 0.55rem;
+}
+.tx-action-btn {
+  padding: 0.28rem 0.55rem;
+  border-radius: 8px;
+  background: rgba(39, 39, 42, 0.8);
+  border: 1px solid rgba(82, 82, 91, 0.5);
+  color: #a1a1aa;
+  font-size: 0.65rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.tx-action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.tx-action-btn-active {
+  background: #e79300;
+  border-color: #e79300;
+  color: #fff;
+}
+.tx-error {
+  color: #ff6b6b;
+  font-size: 0.75rem;
+  margin-bottom: 0.4rem;
+}
+.tx-empty {
+  color: #71717a;
+  font-size: 0.8rem;
+  text-align: center;
+  padding: 1.25rem 0;
+}
+.tx-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+.tx-card {
+  background: #18181b;
+  border: 1px solid #3f3f46;
+  border-radius: 12px;
+  padding: 0.7rem;
+  cursor: pointer;
+}
+.tx-card:hover {
+  border-color: rgba(253, 185, 19, 0.35);
+}
+.tx-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+.tx-label {
+  color: #71717a;
+  font-size: 0.65rem;
+  flex-shrink: 0;
+}
+.tx-value {
+  color: #fff;
+  font-size: 0.7rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  text-align: right;
+  word-break: break-all;
+}
+.tx-muted {
+  color: #a1a1aa;
+}
+.tx-link {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: #c4b5fd;
+}
+.tx-link:hover {
+  color: #fdb913;
+}
+.tx-desc {
+  flex: 1;
+  margin-left: 0.5rem;
+}
+.tx-show-more {
+  width: 100%;
+  margin-top: 0.45rem;
+  padding: 0.4rem;
+  border-radius: 8px;
+  background: rgba(39, 39, 42, 0.8);
+  border: 1px solid rgba(82, 82, 91, 0.5);
+  color: #fdb913;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+}

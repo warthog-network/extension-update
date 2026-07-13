@@ -4,6 +4,9 @@ import Loading from "./pages/loading";
 import Start from "./pages/startedPage";
 import Intro from "./pages/intro";
 import ImportPage from "./pages/importPage";
+import ImportPrivateKey from "./pages/ImportPrivateKey";
+import LoginSaved from "./pages/LoginSaved";
+import LoginFile from "./pages/LoginFile";
 import RecoveryPhase from "./pages/RecoveryPhase";
 import ValidateIntro from "./pages/validateIntro";
 import Validate from "./pages/validate";
@@ -19,16 +22,18 @@ import ShowPrivateKey from "./pages/ShowPrivateKey";
 import useWallet from "./hooks/useWallet";
 import SendFinalStep from "./pages/Sendstep2";
 import SelectNode from "./pages/SelectNode";
+import DefiHub from "./pages/DefiHub";
 
 interface Activity {
   date: string;
   action: string;
   amount: string;
   usdAmount: string;
+  txHash?: string;
 }
 
 const App: React.FC = () => {
-  const { seedPhrase, wallet, password, token, clearToken } = useWallet();
+  const { isAuthenticated, token, clearToken, seedPhrase } = useWallet();
   const [progress, setProgress] = useState(0);
   const [loading, setLoading] = useState(true);
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(
@@ -57,13 +62,11 @@ const App: React.FC = () => {
   }, [startLoading]);
 
   useEffect(() => {
-    if (seedPhrase && wallet && password) {
-      if (!token) {
-        clearToken();
-        navigate("/locked");
-      }
+    if (isAuthenticated && !token) {
+      clearToken();
+      navigate("/locked");
     }
-  }, [token, clearToken, navigate, seedPhrase, wallet, password]);
+  }, [token, clearToken, navigate, isAuthenticated]);
 
   if (loading) return <Loading progress={progress} />;
 
@@ -82,12 +85,12 @@ const App: React.FC = () => {
         element={<ActivityDetailPage selectedActivity={selectedActivity} />}
       />
       <Route path="/locked" element={<LockScreen />} />
-      {/* <Route path="" element={<LockScreen />} /> */}
       <Route path="/receive" element={<ReceivePage />} />
       <Route path="/send" element={<SendPage />} />
       <Route path="/sendstep2" element={<SendFinalStep />} />
       <Route path="/manage-account" element={<ManageAccounts />} />
       <Route path="/select-node" element={<SelectNode />} />
+      <Route path="/defi" element={<DefiHub />} />
       <Route path="/account-details" element={<AccountDetails />} />
       <Route path="/private-key" element={<ShowPrivateKey />} />
     </Routes>
@@ -98,13 +101,16 @@ const App: React.FC = () => {
       <Route path="/" element={<Start />} />
       <Route path="/intro" element={<Intro />} />
       <Route path="/import" element={<ImportPage />} />
+      <Route path="/import-key" element={<ImportPrivateKey />} />
+      <Route path="/login-saved" element={<LoginSaved />} />
+      <Route path="/login-file" element={<LoginFile />} />
       <Route path="/recover" element={<RecoveryPhase />} />
       <Route path="/validate" element={<Validate />} />
       <Route
         path="/validate-intro"
         element={
           <ValidateIntro
-            recoveryPhrase={seedPhrase?.split(" ") || []}
+            recoveryPhrase={seedPhrase?.split(/\s+/).filter(Boolean) || []}
             onGoBack={() => navigate(-2)}
             onComplete={() => navigate("/set-password")}
           />
@@ -114,11 +120,7 @@ const App: React.FC = () => {
     </Routes>
   );
 
-  return seedPhrase && wallet && password ? (
-    <AuthenticatedRoutes />
-  ) : (
-    <UnauthenticatedRoutes />
-  );
+  return isAuthenticated ? <AuthenticatedRoutes /> : <UnauthenticatedRoutes />;
 };
 
 export default App;

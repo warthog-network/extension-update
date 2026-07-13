@@ -6,7 +6,7 @@ import Header from "../components/Header";
 import useWallet from "../hooks/useWallet";
 import { formatWalletAddress } from "../utils";
 import Jazzicon from "react-jazzicon/dist/Jazzicon";
-import { Account } from "warthog-ts";
+import { validateWarthogAddress } from "../utils/warthogNode";
 
 interface AccountType {
   id: number;
@@ -27,6 +27,7 @@ function SendPage() {
     selectedWalletIndex,
     walletList,
     visibleWalletList,
+    selectedNetworkLabel,
     setSelectedWalletIndex,
     setName,
     setWallet,
@@ -54,10 +55,10 @@ function SendPage() {
   const handelSubmit = () => {
     if (publicAddress === "") {
       setError("Please enter a public address");
-    } else if (!Account.validateAddress(publicAddress)) {
-      setError("Invalid address format");
+    } else if (!validateWarthogAddress(publicAddress)) {
+      setError("Invalid address format (40 or 48 hex chars)");
     } else {
-      setTmpDestinationWalletState(publicAddress);
+      setTmpDestinationWalletState(publicAddress.trim().replace(/^0x/i, ""));
       navigate("/sendstep2");
     }
   };
@@ -92,6 +93,9 @@ function SendPage() {
   return (
     <div className="min-h-screen container relative">
       <Header title="Send" />
+      <p className="text-xs text-white/50 mt-1">
+        Network: <span className="text-primary">{selectedNetworkLabel}</span>
+      </p>
 
       <div className="mt-4">
         <p className="text-white text-sm">From</p>

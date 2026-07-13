@@ -37,13 +37,28 @@ const NodeCard = ({
             <div className="text-white/50 text-xs">{address}</div>
           </div>
         </div>
-        <div className="items-center gap-3 cursor-pointer">
-          <div className="flex flex-col items-end hidden">
-            <div className="text-white text-xl font-medium">{status}</div>
-            <div className="text-white/50 text-lg">${latency}</div>
+        <div className="items-center gap-3 cursor-pointer flex">
+          <div className="flex flex-col items-end mr-2">
+            <div
+              className={`text-sm font-medium ${
+                status === "online"
+                  ? "text-emerald-400"
+                  : status === "offline"
+                    ? "text-red-400"
+                    : "text-white/50"
+              }`}
+            >
+              {status}
+            </div>
+            <div className="text-white/50 text-xs">
+              {status === "online" ? `${Math.round(latency)} ms` : "—"}
+            </div>
           </div>
           <IoMdTrash
-            onClick={() => removeNode(id)}
+            onClick={(e) => {
+              e.stopPropagation();
+              removeNode(id);
+            }}
             className="w-6 h-6 cursor-pointer z-10 text-white"
           />
         </div>
