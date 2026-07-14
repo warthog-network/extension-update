@@ -427,6 +427,27 @@ export type HistoryItem = {
   isIncoming?: boolean;
   asset?: string;
   description?: string;
+  fee?: string;
+  source?: "indexer" | "node";
+  meta?: Record<string, unknown> | null;
+  assetName?: string | null;
+  assetHash?: string | null;
+  assetDecimals?: number | null;
+  amountSecondary?: string | null;
+  side?: string;
+  orderAmount?: string;
+  limitPrice?: string;
+  baseAmount?: string;
+  quoteAmount?: string;
+  swapCount?: number;
+};
+
+export type HistoryFetchResult = {
+  items: HistoryItem[];
+  hasMore: boolean;
+  nextPage?: number;
+  source: "indexer" | "node";
+  fromId?: number | null;
 };
 
 function getAmountStr(v: unknown, fallback = "0"): string {
@@ -642,19 +663,85 @@ function toHistoryItem(tx: FlatTx, viewingAddress: string): HistoryItem {
   };
 }
 
-/** Fetch a page of account history. */
+/**
+ * Fetch a page of account history.
+ * Prefers explorer indexer on DeFi (rich `meta` cards); falls back to node RPC.
+ */
 export async function fetchAccountHistory(
   nodeBase: string,
   address: string,
-  beforeTxIndex: number | string = 4294967295,
-): Promise<HistoryItem[]> {
+  options:
+    | number
+    | string
+    | {
+        beforeTxIndex?: number | string;
+        page?: number;
+        filter?: string;
+      } = {},
+): Promise<HistoryFetchResult> {
+  // Back-compat: third arg used to be beforeTxIndex only.
+  const opts =
+    typeof options === "object" && options !== null
+      ? options
+      : { beforeTxIndex: options as number | string };
+
+  const beforeTxIndex = opts.beforeTxIndex ?? 4294967295;
+  const page = Math.max(1, opts.page ?? 1);
+  const filterId = opts.filter || "all";
+
+  // Indexer path (DeFi testnet) — rich meta for limit swaps / matches / etc.
+  try {
+    const { fetchIndexerHistoryPage } = await import("./warthogIndexer");
+    const indexed = await fetchIndexerHistoryPage(nodeBase, address, {
+      page,
+      filter: filterId,
+    });
+    if (indexed && indexed.items.length >= 0 && indexed.source === "indexer") {
+      // Accept empty first page as success (account may truly have no txs of this filter).
+      return {
+        items: indexed.items as HistoryItem[],
+        hasMore: indexed.hasMore,
+        nextPage: indexed.nextPage,
+        source: "indexer",
+        fromId: null,
+      };
+    }
+  } catch (err) {
+    console.warn("[history] indexer path failed, falling back to node", err);
+  }
+
   const data = await nodeGet<Record<string, unknown>>(
     nodeBase,
     `account/${address}/history/${beforeTxIndex}`,
   );
 
   const flat = flattenHistoryPage(data || {});
-  return flat.map((tx) => toHistoryItem(tx, address));
+  const items = flat.map((tx) => {
+    const item = toHistoryItem(tx, address);
+    item.source = "node";
+    return item;
+  });
+  const fromId =
+    data && typeof (data as { fromId?: number }).fromId === "number"
+      ? (data as { fromId: number }).fromId
+      : null;
+
+  return {
+    items,
+    hasMore: items.length > 0 && !!fromId && fromId > 0,
+    fromId: fromId && fromId > 0 ? fromId : null,
+    source: "node",
+  };
+}
+
+/** Convenience: return items only (legacy call sites). */
+export async function fetchAccountHistoryItems(
+  nodeBase: string,
+  address: string,
+  beforeTxIndex: number | string = 4294967295,
+): Promise<HistoryItem[]> {
+  const result = await fetchAccountHistory(nodeBase, address, { beforeTxIndex });
+  return result.items;
 }
 
 /** Lightweight health/latency check for a node. */

@@ -61,8 +61,15 @@ import {
   type NumberColorId,
   type NumberNotation,
 } from "../utils/numberDisplay";
+import TransactionHistoryPanel from "../components/TransactionHistoryPanel";
 
-type MainTab = "overview" | "send-asset" | "assets" | "dex" | "tools";
+type MainTab =
+  | "overview"
+  | "history"
+  | "send-asset"
+  | "assets"
+  | "dex"
+  | "tools";
 type AssetsSub = "create" | "search";
 type DexSub = "limit" | "liquidity" | "market";
 
@@ -147,6 +154,8 @@ function DefiHub() {
     null,
   );
   const [liquidity, setLiquidity] = useState<LiquidityPosition[] | null>(null);
+  /** Overview section open state — single-bar collapsibles like wartbunker */
+  const [showAssets, setShowAssets] = useState(true);
   const [showOrders, setShowOrders] = useState(false);
   const [showLiquidity, setShowLiquidity] = useState(false);
   const [loadingOrders, setLoadingOrders] = useState(false);
@@ -500,6 +509,7 @@ function DefiHub() {
 
   const navTabs: { id: MainTab; label: string }[] = [
     { id: "overview", label: "Overview" },
+    { id: "history", label: "History" },
     { id: "send-asset", label: "Send Asset" },
     { id: "assets", label: "Assets" },
     { id: "dex", label: "DEX" },
@@ -606,12 +616,33 @@ function DefiHub() {
       {error && <p className="defi-error">{error}</p>}
 
       {/* ════════ OVERVIEW ════════ */}
+      {/* ════════ HISTORY — indexer rich cards ════════ */}
+      {tab === "history" && (
+        <section className="defi-section">
+          <div className="defi-section-body !pt-2">
+            <TransactionHistoryPanel
+              wallet={wallet}
+              nodeUrl={nodeUrl}
+              active={tab === "history"}
+            />
+          </div>
+        </section>
+      )}
+
       {tab === "overview" && (
         <>
-          {/* Your Assets */}
+          {/* Your Assets — collapsible bar (wartbunker / mobile overview) */}
           <section className="defi-section">
-            <div className="defi-section-header">
+            <button
+              type="button"
+              className="defi-section-header defi-section-header-toggle"
+              onClick={() => setShowAssets((v) => !v)}
+              aria-expanded={showAssets}
+            >
               <div className="defi-section-header-left">
+                <span className="defi-section-chevron" aria-hidden="true">
+                  {showAssets ? "▼" : "▶"}
+                </span>
                 <span className="defi-section-title defi-section-title-assets">
                   Your Assets
                 </span>
@@ -621,12 +652,13 @@ function DefiHub() {
                   </span>
                 )}
               </div>
-              {assetBalances.length > 1 && (
+              {assetBalances.length > 1 && showAssets && (
                 <span className="defi-hint mt-0 mb-0 text-[10px]">
                   Drag ⋮⋮ to reorder
                 </span>
               )}
-            </div>
+            </button>
+            {showAssets && (
             <div className="defi-section-body">
               {assetBalances.length === 0 ? (
                 <p className="defi-empty">No custom tokens tracked yet</p>
@@ -795,60 +827,64 @@ function DefiHub() {
                 </button>
               </div>
             </div>
+            )}
           </section>
 
-          {/* Open Limit Orders — mobile style */}
+          {/* Open Limit Orders — collapsible single bar */}
           <section className="defi-section">
-            <div className="defi-section-header">
+            <button
+              type="button"
+              className="defi-section-header defi-section-header-toggle"
+              onClick={() =>
+                run(async () => {
+                  if (showOrders) {
+                    setShowOrders(false);
+                    return;
+                  }
+                  if (!openOrders) await refreshOrders();
+                  setShowOrders(true);
+                })
+              }
+              aria-expanded={showOrders}
+            >
               <div className="defi-section-header-left">
+                <span className="defi-section-chevron" aria-hidden="true">
+                  {showOrders ? "▼" : "▶"}
+                </span>
                 <span className="defi-section-title defi-section-title-orders">
                   Open Limit Orders
                 </span>
-                {orderAssetCount > 0 && (
+                {(orderAssetCount > 0 || (openOrders && openOrders.length > 0)) && (
                   <span className="defi-badge defi-badge-purple">
-                    {orderAssetCount} asset
-                    {orderAssetCount !== 1 ? "s" : ""}
+                    {openOrders?.length ?? orderAssetCount} asset
+                    {(openOrders?.length ?? orderAssetCount) !== 1 ? "s" : ""}
                   </span>
                 )}
+                {loadingOrders && !openOrders && (
+                  <span className="defi-badge defi-badge-purple">…</span>
+                )}
               </div>
-            </div>
+            </button>
+            {showOrders && (
             <div className="defi-section-body">
               <div className="defi-btn-row" style={{ marginTop: 0 }}>
                 <button
                   type="button"
-                  className={`defi-compact-btn ${showOrders ? "defi-compact-btn-active" : ""}`}
+                  className="defi-compact-btn"
                   disabled={loadingOrders}
                   onClick={() =>
                     run(async () => {
-                      if (!showOrders) {
-                        await refreshOrders();
-                        setShowOrders(true);
-                      } else {
-                        await refreshOrders();
-                      }
+                      await refreshOrders();
                     })
                   }
                 >
                   {loadingOrders
-                    ? "Loading…"
-                    : showOrders
-                      ? "⟳ Refresh Open Orders"
-                      : openOrders
-                        ? "View Open Orders"
-                        : "View My Open Limit Orders"}
+                    ? "Loading Open Orders…"
+                    : "⟳ Refresh Open Orders"}
                 </button>
-                {showOrders && (
-                  <button
-                    type="button"
-                    className="defi-compact-btn"
-                    onClick={() => setShowOrders(false)}
-                  >
-                    Close
-                  </button>
-                )}
               </div>
 
-              {showOrders && openOrders && openOrders.length > 1 && (
+              {openOrders && openOrders.length > 1 && (
                 <div className="defi-btn-row justify-end">
                   <button
                     type="button"
@@ -875,8 +911,7 @@ function DefiHub() {
                 </div>
               )}
 
-              {showOrders &&
-                openOrders &&
+              {openOrders &&
                 openOrders.map((group, idx) => {
                   const asset = group.baseAsset;
                   const buys = group.wartToAssetSwaps || [];
@@ -1061,23 +1096,37 @@ function DefiHub() {
                   );
                 })}
 
-              {showOrders && openOrders && openOrders.length === 0 && (
+              {openOrders && openOrders.length === 0 && (
                 <p className="defi-empty">No open limit orders</p>
               )}
-              {!showOrders && (
-                <p className="defi-hint">
-                  {openOrders
-                    ? "Open orders are loaded — tap View to show them again."
-                    : "Load your open limit orders from the connected node."}
-                </p>
+              {loadingOrders && !openOrders && (
+                <p className="defi-hint">Loading open orders…</p>
               )}
             </div>
+            )}
           </section>
 
-          {/* My Liquidity Positions — mobile style */}
+          {/* My Liquidity Positions — collapsible single bar */}
           <section className="defi-section">
-            <div className="defi-section-header">
+            <button
+              type="button"
+              className="defi-section-header defi-section-header-toggle"
+              onClick={() =>
+                run(async () => {
+                  if (showLiquidity) {
+                    setShowLiquidity(false);
+                    return;
+                  }
+                  if (liquidity == null) await refreshLiquidity();
+                  setShowLiquidity(true);
+                })
+              }
+              aria-expanded={showLiquidity}
+            >
               <div className="defi-section-header-left">
+                <span className="defi-section-chevron" aria-hidden="true">
+                  {showLiquidity ? "▼" : "▶"}
+                </span>
                 <span className="defi-section-title defi-section-title-liquidity">
                   My Liquidity Positions
                 </span>
@@ -1087,46 +1136,31 @@ function DefiHub() {
                     {liquidity!.length !== 1 ? "s" : ""}
                   </span>
                 )}
+                {loadingLiquidity && liquidity == null && (
+                  <span className="defi-badge defi-badge-amber">…</span>
+                )}
               </div>
-            </div>
+            </button>
+            {showLiquidity && (
             <div className="defi-section-body">
               <div className="defi-btn-row" style={{ marginTop: 0 }}>
                 <button
                   type="button"
-                  className={`defi-compact-btn ${showLiquidity ? "defi-compact-btn-active" : ""}`}
+                  className="defi-compact-btn"
                   disabled={loadingLiquidity}
                   onClick={() =>
                     run(async () => {
-                      if (!showLiquidity) {
-                        await refreshLiquidity();
-                        setShowLiquidity(true);
-                      } else {
-                        await refreshLiquidity();
-                      }
+                      await refreshLiquidity();
                     })
                   }
                 >
                   {loadingLiquidity
-                    ? "Loading…"
-                    : showLiquidity
-                      ? "⟳ Refresh Liquidity"
-                      : liquidity
-                        ? "View Liquidity Positions"
-                        : "View My Liquidity Positions"}
+                    ? "Loading Liquidity…"
+                    : "⟳ Refresh Liquidity"}
                 </button>
-                {showLiquidity && (
-                  <button
-                    type="button"
-                    className="defi-compact-btn"
-                    onClick={() => setShowLiquidity(false)}
-                  >
-                    Close
-                  </button>
-                )}
               </div>
 
-              {showLiquidity &&
-                liquidity?.map((pos) => (
+              {liquidity?.map((pos) => (
                   <div key={pos.hash} className="defi-card-inset">
                     <div className="defi-row">
                       <div
@@ -1187,7 +1221,7 @@ function DefiHub() {
                   </div>
                 ))}
 
-              {showLiquidity && liquidity && liquidity.length === 0 && (
+              {liquidity && liquidity.length === 0 && (
                 <div className="defi-card mt-2">
                   <p className="defi-empty">No liquidity positions found</p>
                   <p className="defi-hint">
@@ -1196,14 +1230,11 @@ function DefiHub() {
                   </p>
                 </div>
               )}
-              {!showLiquidity && (
-                <p className="defi-hint">
-                  {liquidity
-                    ? "Liquidity positions are loaded — tap View to show them again."
-                    : "Load LP share balances for your tracked assets from the connected node."}
-                </p>
+              {loadingLiquidity && liquidity == null && (
+                <p className="defi-hint">Loading liquidity positions…</p>
               )}
             </div>
+            )}
           </section>
         </>
       )}

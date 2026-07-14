@@ -1,25 +1,21 @@
-import React, { useState, useCallback, useEffect, useMemo } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import ProfileHeader from "../components/ProfileHeader";
 import WalletInfo from "../components/WalletInfo";
 import Balance from "../components/Balance";
 import ActionButtons from "../components/ActionButtons";
 import TabNavigation from "../components/TabNavigation";
 import TokenItem from "../components/TokenItem";
-import ActivityItem, { type ActivityRow } from "../components/ActivityItem";
+import TransactionHistoryPanel, {
+  type HistoryActivity,
+} from "../components/TransactionHistoryPanel";
 import { useNavigate } from "react-router-dom";
 import useWallet from "../hooks/useWallet";
-import {
-  fetchAccountHistory,
-  fetchBalanceAndPin,
-  type HistoryItem,
-} from "../utils/warthogNode";
+import { fetchBalanceAndPin } from "../utils/warthogNode";
 import { fetchWartUsdPrice } from "../utils/wartPrice";
 import { isDefiNode } from "../utils/nodes";
 
-interface Activity extends ActivityRow {}
-
 interface Props {
-  setSelectedActivity: (activity: Activity) => void;
+  setSelectedActivity: (activity: HistoryActivity) => void;
 }
 
 enum Tab {
@@ -34,24 +30,21 @@ const Home: React.FC<Props> = ({ setSelectedActivity }) => {
   const [activeTab, setActiveTab] = useState<Tab>(Tab.Tokens);
   const [balance, setBalance] = useState(0);
   const [balanceUSD, setBalanceUSD] = useState(0);
-  const [priceUsd, setPriceUsd] = useState(0);
-  const [activities, setActivities] = useState<Activity[]>([]);
-  const [historyError, setHistoryError] = useState<string | null>(null);
   const [balanceError, setBalanceError] = useState<string | null>(null);
-  const [loadingHistory, setLoadingHistory] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [showTransactions, setShowTransactions] = useState(true);
-  const [visibleCount, setVisibleCount] = useState(7);
+  const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
 
   const nodeUrl =
     selectedNodeUrl ||
     (nodeList.length > 0 ? nodeList[selectedNodeIndex] : null);
 
+  const isTestnet = nodeUrl ? isDefiNode(nodeUrl) : false;
+
   const copyToClipboard = useCallback((text: string) => {
     navigator.clipboard.writeText(text);
   }, []);
 
-  const handleActivityClick = (activityItem: Activity) => {
+  const handleActivityClick = (activityItem: HistoryActivity) => {
     setSelectedActivity(activityItem);
     navigate("/activity-details");
   };
@@ -73,49 +66,23 @@ const Home: React.FC<Props> = ({ setSelectedActivity }) => {
   const updatePrice = useCallback(async () => {
     try {
       const price = await fetchWartUsdPrice();
-      setPriceUsd(price && price > 0 ? price : 0);
       setBalanceUSD(price && price > 0 ? price : 0);
     } catch (error) {
       console.error("Error fetching price:", error);
     }
   }, []);
 
-  const loadHistory = useCallback(async () => {
-    if (!wallet || !nodeUrl) return;
-    setLoadingHistory(true);
-    setHistoryError(null);
-    try {
-      const items: HistoryItem[] = await fetchAccountHistory(nodeUrl, wallet);
-      const price = priceUsd > 0 ? priceUsd : (await fetchWartUsdPrice()) || 0;
-      const withUsd = items.map((item) => {
-        const numeric =
-          Math.abs(parseFloat((item.amountRaw || item.amount).replace(/[^\d.-]/g, ""))) ||
-          0;
-        const usd = price > 0 ? `$${(numeric * price).toFixed(2)}` : "N/A";
-        return { ...item, usdAmount: usd };
-      });
-      setActivities(withUsd);
-      setVisibleCount(7);
-    } catch (error) {
-      console.warn("History fetch failed:", error);
-      setHistoryError(
-        error instanceof Error ? error.message : "History unavailable on this node",
-      );
-      setActivities([]);
-    } finally {
-      setLoadingHistory(false);
-    }
-  }, [wallet, nodeUrl, priceUsd]);
-
   const refreshAll = useCallback(async () => {
     setRefreshing(true);
     try {
       await Promise.all([updateBalance(), updatePrice()]);
-      if (activeTab === Tab.Activity) await loadHistory();
+      if (activeTab === Tab.Activity) {
+        setHistoryRefreshKey((k) => k + 1);
+      }
     } finally {
       setRefreshing(false);
     }
-  }, [updateBalance, updatePrice, activeTab, loadHistory]);
+  }, [updateBalance, updatePrice, activeTab]);
 
   useEffect(() => {
     if (!wallet || !nodeUrl) return;
@@ -130,24 +97,6 @@ const Home: React.FC<Props> = ({ setSelectedActivity }) => {
       clearInterval(intervalPrice);
     };
   }, [wallet, nodeUrl, updateBalance, updatePrice]);
-
-  useEffect(() => {
-    if (activeTab === Tab.Activity) {
-      loadHistory();
-    }
-  }, [activeTab, loadHistory]);
-
-  const isTestnet = nodeUrl ? isDefiNode(nodeUrl) : false;
-
-  const blockCounts = useMemo(() => {
-    const now = Date.now() / 1000;
-    const rewards = activities.filter((tx) => tx.isReward);
-    return {
-      h24: rewards.filter((tx) => (tx.timestamp || 0) >= now - 86400).length,
-      week: rewards.filter((tx) => (tx.timestamp || 0) >= now - 604800).length,
-      month: rewards.filter((tx) => (tx.timestamp || 0) >= now - 2592000).length,
-    };
-  }, [activities]);
 
   const nodeLabel = nodeUrl
     ? nodeUrl.replace(/^https?:\/\//, "").replace(/\/$/, "")
@@ -201,68 +150,13 @@ const Home: React.FC<Props> = ({ setSelectedActivity }) => {
           usdValue={balanceUSD || 0}
         />
       ) : (
-        <div className="tx-history-section">
-          <p className="tx-section-label">Blocks Mined</p>
-          <div className="tx-reward-row">
-            <span className="tx-reward-pill">24h: {blockCounts.h24}</span>
-            <span className="tx-reward-pill">Week: {blockCounts.week}</span>
-            <span className="tx-reward-pill">Month: {blockCounts.month}</span>
-          </div>
-
-          <h3 className="tx-section-title">Transaction History</h3>
-          <p className="tx-network-note">
-            {isTestnet
-              ? "DeFi testnet — includes WART transfers, assets, DEX orders, liquidity, and more"
-              : "Mainnet — WART transfers and block rewards"}
-          </p>
-
-          <div className="tx-btn-row">
-            <button
-              type="button"
-              className="tx-action-btn"
-              disabled={loadingHistory}
-              onClick={() => loadHistory()}
-            >
-              {loadingHistory ? "Refreshing…" : "Refresh"}
-            </button>
-            <button
-              type="button"
-              className={`tx-action-btn ${showTransactions ? "tx-action-btn-active" : ""}`}
-              onClick={() => setShowTransactions((v) => !v)}
-            >
-              {showTransactions ? "Hide Transactions" : "Show Transactions"}
-            </button>
-          </div>
-
-          {historyError && !loadingHistory && (
-            <p className="tx-error">{historyError}</p>
-          )}
-
-          {showTransactions && (
-            <>
-              {loadingHistory && activities.length === 0 && (
-                <p className="tx-empty">Loading transaction history…</p>
-              )}
-              {!loadingHistory && !historyError && activities.length === 0 && (
-                <p className="tx-empty">No transactions yet</p>
-              )}
-              <ActivityItem
-                activities={activities.slice(0, visibleCount)}
-                onActivityClick={handleActivityClick}
-                walletAddress={wallet}
-              />
-              {activities.length > visibleCount && (
-                <button
-                  type="button"
-                  className="tx-show-more"
-                  onClick={() => setVisibleCount((c) => c + 7)}
-                >
-                  Show More
-                </button>
-              )}
-            </>
-          )}
-        </div>
+        <TransactionHistoryPanel
+          wallet={wallet}
+          nodeUrl={nodeUrl}
+          active={activeTab === Tab.Activity}
+          onActivityClick={handleActivityClick}
+          refreshKey={historyRefreshKey}
+        />
       )}
     </div>
   );
