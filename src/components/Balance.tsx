@@ -1,12 +1,12 @@
 import React from "react";
-import {
-  formatDisplayNumber,
-  getColorHex,
-  loadNumberDisplayPrefs,
-} from "../utils/numberDisplay";
+import SpendableBalanceDisplay from "./SpendableBalanceDisplay";
 
 interface BalanceProps {
-  balance: number;
+  /** Free / available balance (preferred primary). Falls back to total if omitted. */
+  balance: number | string;
+  available?: number | string | null;
+  locked?: number | string | null;
+  total?: number | string | null;
   usdValue: number;
   isTestnet?: boolean;
   refreshing?: boolean;
@@ -17,6 +17,9 @@ interface BalanceProps {
 
 const Balance: React.FC<BalanceProps> = ({
   balance,
+  available,
+  locked,
+  total,
   usdValue,
   isTestnet,
   refreshing = false,
@@ -24,57 +27,23 @@ const Balance: React.FC<BalanceProps> = ({
   networkLabel,
   nodeLabel,
 }) => {
-  const prefs = loadNumberDisplayPrefs();
-  const display = Number.isFinite(balance)
-    ? formatDisplayNumber(balance, prefs)
-    : "0";
-
-  const usd =
-    Number.isFinite(balance) && Number.isFinite(usdValue) && usdValue > 0
-      ? formatDisplayNumber(balance * usdValue, {
-          ...prefs,
-          maxDecimals: 2,
-          notation: "standard",
-        })
-      : isTestnet
-        ? "Testnet"
-        : "—";
-
-  const balanceColor = getColorHex(prefs.balanceColor);
+  const free = available ?? balance;
+  const totalVal = total ?? balance;
 
   return (
-    <div className="main-balance-hero">
-      <div className="main-balance-top">
-        <span className="main-balance-label">Total Balance</span>
-        {onRefresh ? (
-          <button
-            type="button"
-            className="main-balance-refresh"
-            disabled={refreshing}
-            onClick={onRefresh}
-          >
-            <span className={refreshing ? "animate-spin inline-block" : ""}>
-              ⟳
-            </span>{" "}
-            {refreshing ? "Refreshing…" : "Refresh"}
-          </button>
-        ) : null}
-      </div>
-      <div className={`main-balance-row${refreshing ? " opacity-60" : ""}`}>
-        <span className="main-balance-value" style={{ color: balanceColor }}>
-          {display}
-        </span>
-        <span className="main-balance-unit">WART</span>
-      </div>
-      <div className={`main-balance-usd${refreshing ? " opacity-60" : ""}`}>
-        ≈ {usd === "Testnet" || usd === "—" ? usd : `${usd} USD`}
-      </div>
-      {(networkLabel || nodeLabel) && (
-        <div className="main-balance-node">
-          {[nodeLabel, networkLabel].filter(Boolean).join(" · ")}
-        </div>
-      )}
-    </div>
+    <SpendableBalanceDisplay
+      layout="hero"
+      available={free}
+      locked={locked}
+      total={totalVal}
+      unit="WART"
+      usdValue={usdValue}
+      isTestnet={isTestnet}
+      refreshing={refreshing}
+      onRefresh={onRefresh}
+      networkLabel={networkLabel}
+      nodeLabel={nodeLabel}
+    />
   );
 };
 

@@ -12,6 +12,12 @@ import { DEFAULT_TX_FEE } from "../config/network";
 import { fetchBalanceAndPin } from "../utils/warthogNode";
 import { fetchWartUsdPrice } from "../utils/wartPrice";
 import {
+  amountExceedsAvailable,
+  insufficientFreeBalanceMessage,
+  mapInsufficientBalanceError,
+} from "../utils/balanceBreakdown";
+import SpendableBalanceDisplay from "../components/SpendableBalanceDisplay";
+import {
   cancelOrderTx,
   computePoolSpotPrice,
   createAssetTx,
@@ -138,6 +144,8 @@ function DefiHub() {
   const [fee, setFee] = useState(DEFAULT_TX_FEE);
 
   const [wartBalance, setWartBalance] = useState("0");
+  const [wartAvailable, setWartAvailable] = useState("0");
+  const [wartLocked, setWartLocked] = useState("0");
   const [usdBalance, setUsdBalance] = useState("N/A");
   const [refreshing, setRefreshing] = useState(false);
 
@@ -170,6 +178,8 @@ function DefiHub() {
   const [sendName, setSendName] = useState("");
   const [sendDecimals, setSendDecimals] = useState("8");
   const [sendBalance, setSendBalance] = useState("");
+  const [sendAvailable, setSendAvailable] = useState("");
+  const [sendLocked, setSendLocked] = useState("");
   const [sendTo, setSendTo] = useState("");
   const [sendAmount, setSendAmount] = useState("");
   const [sendIsLp, setSendIsLp] = useState(false);
@@ -258,7 +268,10 @@ function DefiHub() {
     try {
       const bal = await fetchBalanceAndPin(nodeUrl, wallet);
       setWartBalance(bal.balance);
+      setWartAvailable(bal.available);
+      setWartLocked(bal.locked);
       const price = await fetchWartUsdPrice();
+      // USD priced on total holdings (available + locked)
       setUsdBalance(
         price && price > 0
           ? (parseFloat(bal.balance) * price).toFixed(2)
@@ -286,6 +299,9 @@ function DefiHub() {
           hash: item.hash,
           name: item.customName || "?",
           balance: "—",
+          available: "—",
+          locked: "0",
+          hasLocked: false,
           decimals: 8,
         });
       }
@@ -473,6 +489,8 @@ function DefiHub() {
     setSendName(asset.name);
     setSendDecimals(String(asset.decimals));
     setSendBalance(asset.balance);
+    setSendAvailable(asset.available ?? asset.balance);
+    setSendLocked(asset.locked ?? "0");
     setSendAmount("");
     setSendTo("");
     setSendIsLp(false);
@@ -530,7 +548,11 @@ function DefiHub() {
             </div>
           ) : null}
           <div className="defi-hero-top">
-            <span className="defi-hero-label">Total Balance</span>
+            <span className="defi-hero-label">
+              {parseFloat(wartLocked) > 0
+                ? "Available Balance"
+                : "Total Balance"}
+            </span>
             <button
               type="button"
               className="defi-refresh"
@@ -545,10 +567,30 @@ function DefiHub() {
               className="defi-hero-balance"
               style={{ color: getColorHex(numPrefs.balanceColor) }}
             >
-              {formatDisplayNumber(wartBalance, numPrefs)}
+              {formatDisplayNumber(
+                parseFloat(wartLocked) > 0 ? wartAvailable : wartBalance,
+                numPrefs,
+              )}
             </span>
             <span className="defi-hero-unit">WART</span>
           </div>
+          {parseFloat(wartLocked) > 0 ? (
+            <div className="main-balance-meta" style={{ marginTop: 6 }}>
+              <span>
+                Total{" "}
+                <span className="main-balance-meta-total">
+                  {formatDisplayNumber(wartBalance, numPrefs)}
+                </span>
+              </span>
+              <span className="main-balance-meta-locked">
+                Locked{" "}
+                <span className="main-balance-meta-locked-val">
+                  {formatDisplayNumber(wartLocked, numPrefs)}
+                </span>
+                <span className="main-balance-meta-hint"> (open orders)</span>
+              </span>
+            </div>
+          ) : null}
           <div className="defi-hero-usd">
             ≈{" "}
             {usdBalance === "N/A"
@@ -756,15 +798,15 @@ function DefiHub() {
                         </div>
                       </div>
                       <div className="text-right shrink-0">
-                        <div
-                          className="defi-balance"
-                          style={{ color: getColorHex(numPrefs.balanceColor) }}
-                        >
-                          {formatDisplayNumber(asset.balance, numPrefs)}
-                        </div>
-                        <div className="text-[10px] text-[var(--defi-muted)]">
-                          {asset.name}
-                        </div>
+                        <SpendableBalanceDisplay
+                          layout="row"
+                          available={asset.available ?? asset.balance}
+                          locked={asset.locked}
+                          total={asset.balance}
+                          unit={asset.name}
+                          primaryColor={getColorHex(numPrefs.balanceColor)}
+                          primaryClassName="defi-balance"
+                        />
                       </div>
                     </div>
                     <div className="defi-btn-row">
@@ -1288,21 +1330,34 @@ function DefiHub() {
               onChange={(e) => setSendTo(e.target.value)}
               placeholder="40 or 48 hex chars"
             />
-            <label className="defi-label">
-              Amount{sendBalance ? ` (balance: ${sendBalance})` : ""}
-            </label>
+            {(sendAvailable || sendBalance) && (
+              <div className="mb-2">
+                <SpendableBalanceDisplay
+                  layout="stack"
+                  label="Available"
+                  available={sendAvailable || sendBalance}
+                  locked={sendLocked}
+                  total={sendBalance}
+                  unit={sendName || undefined}
+                />
+              </div>
+            )}
+            <label className="defi-label">Amount</label>
             <input
               className="defi-input"
               value={sendAmount}
               onChange={(e) => setSendAmount(e.target.value)}
             />
-            {sendBalance && sendBalance !== "—" && (
+            {(sendAvailable || sendBalance) &&
+              (sendAvailable || sendBalance) !== "—" && (
               <button
                 type="button"
                 className="defi-compact-btn mb-2"
-                onClick={() => setSendAmount(sendBalance)}
+                onClick={() =>
+                  setSendAmount(sendAvailable || sendBalance)
+                }
               >
-                Max
+                Max available
               </button>
             )}
             <label className="defi-label">Decimals</label>
@@ -1338,18 +1393,55 @@ function DefiHub() {
                       "Asset hash, recipient, and amount are required",
                     );
                   }
-                  const r = await transferAssetTx(nodeUrl, getPk(), wallet, {
-                    assetHash: sendHash,
-                    toAddress: sendTo,
-                    amount: sendAmount,
-                    decimals: parseInt(sendDecimals, 10) || 8,
-                    isLiquidity: sendIsLp,
-                    fee,
-                  });
-                  setStatus(`Sent · ${r.txHash || "submitted"}`);
-                  setSendAmount("");
-                  setSendTo("");
-                  await refreshAssets();
+                  // Live re-fetch free balance at submit
+                  let free = sendAvailable || sendBalance;
+                  let locked = sendLocked || "0";
+                  try {
+                    const live = await fetchAssetBalance(
+                      nodeUrl,
+                      wallet,
+                      sendHash,
+                    );
+                    free = live.available;
+                    locked = live.locked;
+                    setSendBalance(live.balance);
+                    setSendAvailable(live.available);
+                    setSendLocked(live.locked);
+                  } catch {
+                    /* use cached */
+                  }
+                  if (amountExceedsAvailable(sendAmount, free)) {
+                    setSendAmount(free);
+                    throw new Error(
+                      insufficientFreeBalanceMessage({
+                        available: free,
+                        locked,
+                        unit: sendName || undefined,
+                      }),
+                    );
+                  }
+                  try {
+                    const r = await transferAssetTx(nodeUrl, getPk(), wallet, {
+                      assetHash: sendHash,
+                      toAddress: sendTo,
+                      amount: sendAmount,
+                      decimals: parseInt(sendDecimals, 10) || 8,
+                      isLiquidity: sendIsLp,
+                      fee,
+                    });
+                    setStatus(`Sent · ${r.txHash || "submitted"}`);
+                    setSendAmount("");
+                    setSendTo("");
+                    await refreshAssets();
+                  } catch (e) {
+                    throw new Error(
+                      mapInsufficientBalanceError(e, {
+                        available: free,
+                        locked,
+                        unit: sendName || undefined,
+                      }),
+                    );
+                  }
                 })
               }
             >
@@ -1562,6 +1654,9 @@ function DefiHub() {
                                 hash,
                                 name: asset.name || "Asset",
                                 balance: "—",
+                                available: "—",
+                                locked: "0",
+                                hasLocked: false,
                                 decimals: asset.decimals ?? 8,
                               })
                             }
@@ -1829,6 +1924,58 @@ function DefiHub() {
                 <label className="defi-label">
                   Amount ({limitMode === "buy" ? "WART" : dexName || "token"})
                 </label>
+                {limitMode === "buy" ? (
+                  <div className="mb-1">
+                    <SpendableBalanceDisplay
+                      layout="stack"
+                      label="Available WART"
+                      available={wartAvailable}
+                      locked={wartLocked}
+                      total={wartBalance}
+                      unit="WART"
+                    />
+                    <button
+                      type="button"
+                      className="defi-compact-btn mb-2"
+                      onClick={() => setLimitAmount(wartAvailable)}
+                    >
+                      Max available
+                    </button>
+                  </div>
+                ) : (
+                  (() => {
+                    const tokenBal = assetBalances.find(
+                      (a) =>
+                        a.hash.toLowerCase() ===
+                        normalizeAssetHash(dexHash),
+                    );
+                    const free =
+                      tokenBal?.available ?? tokenBal?.balance ?? "0";
+                    const locked = tokenBal?.locked ?? "0";
+                    const total = tokenBal?.balance ?? free;
+                    return (
+                      <div className="mb-1">
+                        <SpendableBalanceDisplay
+                          layout="stack"
+                          label={`Available ${dexName || "token"}`}
+                          available={free}
+                          locked={locked}
+                          total={total}
+                          unit={dexName || undefined}
+                        />
+                        {tokenBal ? (
+                          <button
+                            type="button"
+                            className="defi-compact-btn mb-2"
+                            onClick={() => setLimitAmount(free)}
+                          >
+                            Max available
+                          </button>
+                        ) : null}
+                      </div>
+                    );
+                  })()
+                )}
                 <input
                   className="defi-input"
                   value={limitAmount}
@@ -1856,19 +2003,95 @@ function DefiHub() {
                       if (!limitEncoded.trim()) {
                         throw new Error("Encode a limit price first");
                       }
-                      const r = await limitSwapTx(nodeUrl, getPk(), wallet, {
-                        assetHash: dexHash,
-                        isBuy: limitMode === "buy",
-                        amount: limitAmount,
-                        assetDecimals: parseInt(dexDecimals, 10) || 8,
-                        limitPrice: limitEncoded.trim(),
-                        fee,
-                      });
-                      setStatus(
-                        `${limitMode.toUpperCase()} · ${r.txHash || "ok"}`,
-                      );
-                      setLimitAmount("");
-                      setLimitEncoded("");
+                      if (!limitAmount || parseFloat(limitAmount) <= 0) {
+                        throw new Error("Enter a valid amount");
+                      }
+
+                      const isBuy = limitMode === "buy";
+                      let free: string;
+                      let locked: string;
+                      let unit: string;
+
+                      if (isBuy) {
+                        // Live re-fetch WART free balance
+                        try {
+                          const live = await fetchBalanceAndPin(
+                            nodeUrl,
+                            wallet,
+                          );
+                          free = live.available;
+                          locked = live.locked;
+                          setWartBalance(live.balance);
+                          setWartAvailable(live.available);
+                          setWartLocked(live.locked);
+                        } catch {
+                          free = wartAvailable;
+                          locked = wartLocked;
+                        }
+                        unit = "WART";
+                      } else {
+                        try {
+                          const live = await fetchAssetBalance(
+                            nodeUrl,
+                            wallet,
+                            dexHash,
+                          );
+                          free = live.available;
+                          locked = live.locked;
+                        } catch {
+                          const tokenBal = assetBalances.find(
+                            (a) =>
+                              a.hash.toLowerCase() ===
+                              normalizeAssetHash(dexHash),
+                          );
+                          free =
+                            tokenBal?.available ?? tokenBal?.balance ?? "0";
+                          locked = tokenBal?.locked ?? "0";
+                        }
+                        unit = dexName || "token";
+                      }
+
+                      if (amountExceedsAvailable(limitAmount, free)) {
+                        setLimitAmount(free);
+                        throw new Error(
+                          insufficientFreeBalanceMessage({
+                            available: free,
+                            locked,
+                            unit,
+                          }),
+                        );
+                      }
+
+                      try {
+                        const r = await limitSwapTx(
+                          nodeUrl,
+                          getPk(),
+                          wallet,
+                          {
+                            assetHash: dexHash,
+                            isBuy,
+                            amount: limitAmount,
+                            assetDecimals: parseInt(dexDecimals, 10) || 8,
+                            limitPrice: limitEncoded.trim(),
+                            fee,
+                          },
+                        );
+                        setStatus(
+                          `${limitMode.toUpperCase()} · ${r.txHash || "ok"}`,
+                        );
+                        setLimitAmount("");
+                        setLimitEncoded("");
+                        await refreshBalance();
+                        await refreshAssets();
+                      } catch (e) {
+                        throw new Error(
+                          mapInsufficientBalanceError(e, {
+                            available: free,
+                            locked,
+                            unit,
+                          }),
+                        );
+                      }
                     })
                   }
                 >

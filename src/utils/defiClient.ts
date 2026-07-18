@@ -19,12 +19,17 @@ import {
 } from "warthog-js";
 import { DEFAULT_TX_FEE } from "../config/network";
 import { normalizeNodeUrl } from "./nodes";
+import { formatBalanceBreakdown } from "./balanceBreakdown";
 
 /** Matches mobile-wallet AssetBalance / OpenOrders shapes. */
 export type DefiAssetBalance = {
   hash: string;
   name: string;
+  /** Total holdings (available + locked). Backward-compatible field. */
   balance: string;
+  available: string;
+  locked: string;
+  hasLocked: boolean;
   decimals: number;
 };
 
@@ -201,7 +206,7 @@ function formatBalanceObj(obj: unknown, decimals = 8): string {
   return "0";
 }
 
-/** Fetch asset balance for one hash. */
+/** Fetch asset balance for one hash (total / available / locked). */
 export async function fetchAssetBalance(
   nodeBase: string,
   address: string,
@@ -215,16 +220,21 @@ export async function fetchAssetBalance(
   }
   const data = res.data as {
     token?: { name?: string; decimals?: number };
-    balance?: { total?: unknown } | unknown;
+    balance?: unknown;
   };
   const tokenInfo = data?.token || {};
-  const balanceInfo =
-    (data?.balance as { total?: unknown })?.total ?? data?.balance ?? {};
   const decimals = tokenInfo.decimals ?? 8;
+  const breakdown = formatBalanceBreakdown(data?.balance, {
+    kind: "token",
+    decimals,
+  });
   return {
     hash,
     name: tokenInfo.name || hash.slice(0, 8),
-    balance: formatBalanceObj(balanceInfo, decimals),
+    balance: breakdown.total,
+    available: breakdown.available,
+    locked: breakdown.locked,
+    hasLocked: breakdown.hasLocked,
     decimals,
   };
 }

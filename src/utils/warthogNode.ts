@@ -6,9 +6,16 @@ import { ethers } from "ethers";
 import secp256k1 from "secp256k1";
 import { DEFAULT_TX_FEE } from "../config/network";
 import { isDefiNode, isMainnetNode, normalizeNodeUrl } from "./nodes";
+import { formatBalanceBreakdown } from "./balanceBreakdown";
 
 export type BalanceResult = {
+  /** Total holdings (available + locked). Kept for backward compatibility. */
   balance: string;
+  /** Free to spend (total − locked − mempool). */
+  available: string;
+  /** Locked in open orders / pending. */
+  locked: string;
+  hasLocked: boolean;
   nextNonce: number;
   pinHeight: number;
   pinHash: string;
@@ -82,24 +89,6 @@ function formatAmountFromRaw(raw: bigint | number | string, precision = 8): stri
   return `${whole}.${frac.toString().padStart(precision, "0")}`;
 }
 
-function formatWartBalance(wartObj: unknown): string {
-  if (wartObj == null) return "0.00000000";
-  if (typeof wartObj === "string" || typeof wartObj === "number") {
-    const n = Number(wartObj);
-    return Number.isFinite(n) ? n.toFixed(8) : "0.00000000";
-  }
-  if (typeof wartObj === "object") {
-    const obj = wartObj as { str?: string; E8?: number | string; balance?: string };
-    if (obj.str) return obj.str;
-    if (obj.E8 !== undefined) return formatAmountFromRaw(obj.E8, 8);
-    if (obj.balance !== undefined) {
-      const n = Number(obj.balance);
-      return Number.isFinite(n) ? n.toFixed(8) : "0.00000000";
-    }
-  }
-  return "0.00000000";
-}
-
 function normalizeChainPin(data: Record<string, unknown>): {
   pinHash: string;
   pinHeight: number;
@@ -152,6 +141,7 @@ export function validateWarthogAddress(raw: string): boolean {
 
 /**
  * Fetch WART balance + chain pin (mainnet `/balance` vs DeFi `/wart_balance`).
+ * Returns total / available / locked so UIs can show free vs open-order locks.
  */
 export async function fetchBalanceAndPin(
   nodeBase: string,
@@ -161,28 +151,34 @@ export async function fetchBalanceAndPin(
   const headData = await nodeGet<Record<string, unknown>>(nodeBase, "chain/head");
   const { pinHash, pinHeight } = normalizeChainPin(headData);
 
-  let balance = "0.00000000";
+  let container: unknown = null;
   let nextNonce = 0;
 
   if (defi) {
     const data = await nodeGet<{
-      wart?: { total?: unknown };
+      wart?: unknown;
       balance?: unknown;
+      account?: { nonceId?: number };
     }>(nodeBase, `account/${address}/wart_balance`);
-    balance = formatWartBalance(data?.wart?.total ?? data?.balance);
-    nextNonce = 0;
+    container = data?.wart ?? data?.balance;
+    nextNonce = Number(data?.account?.nonceId) || 0;
   } else {
     try {
       const data = await nodeGet<Record<string, unknown>>(
         nodeBase,
         `account/${address}/balance`,
       );
-      if (data?.balance && typeof data.balance === "object") {
-        balance = formatWartBalance(
-          (data.balance as { total?: unknown }).total ?? data.balance,
-        );
-      } else {
-        balance = formatWartBalance(data?.balance);
+      container = data?.balance;
+      if (container == null && (data as { balanceE8?: unknown }).balanceE8 != null) {
+        container = { E8: (data as { balanceE8: unknown }).balanceE8 };
+      } else if (typeof container === "number" || typeof container === "string") {
+        const n = parseFloat(String(container));
+        if (Number.isFinite(n)) {
+          container = {
+            str: String(container),
+            E8: Math.round(n * 1e8),
+          };
+        }
       }
       nextNonce =
         Number(data?.nonceId) ||
@@ -190,17 +186,22 @@ export async function fetchBalanceAndPin(
         0;
     } catch {
       // Fallback for hybrid nodes
-      const data = await nodeGet<{ wart?: { total?: unknown } }>(
+      const data = await nodeGet<{ wart?: unknown }>(
         nodeBase,
         `account/${address}/wart_balance`,
       );
-      balance = formatWartBalance(data?.wart?.total);
+      container = data?.wart;
       nextNonce = 0;
     }
   }
 
+  const breakdown = formatBalanceBreakdown(container, { kind: "wart" });
+
   return {
-    balance,
+    balance: breakdown.total,
+    available: breakdown.available,
+    locked: breakdown.locked,
+    hasLocked: breakdown.hasLocked,
     nextNonce: Number.isFinite(nextNonce) ? nextNonce : 0,
     pinHeight,
     pinHash,

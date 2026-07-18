@@ -15,6 +15,12 @@ import {
 } from "../utils/warthogNode";
 import { DEFAULT_TX_FEE } from "../config/network";
 import { isDefiNode } from "../utils/nodes";
+import {
+  amountExceedsAvailable,
+  insufficientFreeBalanceMessage,
+  mapInsufficientBalanceError,
+} from "../utils/balanceBreakdown";
+import SpendableBalanceDisplay from "../components/SpendableBalanceDisplay";
 
 interface AccountType {
   id: number;
@@ -64,6 +70,8 @@ function SendFinalStep() {
   const [amount, setAmount] = useState<number>(0);
   const [fee, setFee] = useState<string>(DEFAULT_TX_FEE);
   const [balance, setBalance] = useState<string>("0");
+  const [balanceAvailable, setBalanceAvailable] = useState<string>("0");
+  const [balanceLocked, setBalanceLocked] = useState<string>("0");
   const [nonce, setNonce] = useState<number>(0);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -91,6 +99,8 @@ function SendFinalStep() {
     fetchBalanceAndPin(nodeUrl, addr)
       .then((r) => {
         setBalance(r.balance);
+        setBalanceAvailable(r.available);
+        setBalanceLocked(r.locked);
         setNonce(r.nextNonce);
       })
       .catch((err) => console.warn("Balance preload failed:", err));
@@ -126,6 +136,40 @@ function SendFinalStep() {
     setTransactionError("");
 
     try {
+      // Live re-fetch free balance at submit (stale overview can lie)
+      const addr = walletList[selectedWalletIndex];
+      let free = balanceAvailable;
+      let locked = balanceLocked;
+      if (addr) {
+        try {
+          const live = await fetchBalanceAndPin(nodeUrl, addr);
+          free = live.available;
+          locked = live.locked;
+          setBalance(live.balance);
+          setBalanceAvailable(live.available);
+          setBalanceLocked(live.locked);
+          setNonce(live.nextNonce);
+        } catch {
+          /* use cached */
+        }
+      }
+
+      // amount + fee must fit in free balance
+      const feeN = parseFloat(fee) || 0;
+      const need = amount + feeN;
+      if (amountExceedsAvailable(need, free)) {
+        const msg = insufficientFreeBalanceMessage({
+          available: free,
+          locked,
+          unit: "WART",
+        });
+        setTransactionError(msg);
+        setTransactionStatus("error");
+        const cap = Math.max(0, (parseFloat(free) || 0) - feeN);
+        setAmount(cap);
+        return;
+      }
+
       const account = getAccountFromIndex(selectedWalletIndex);
       const result = await sendWartTransfer({
         nodeBase: nodeUrl,
@@ -142,11 +186,21 @@ function SendFinalStep() {
     } catch (error) {
       setTransactionStatus("error");
       setTransactionError(
-        error instanceof Error ? error.message : "Transaction failed",
+        mapInsufficientBalanceError(error, {
+          available: balanceAvailable,
+          locked: balanceLocked,
+          unit: "WART",
+        }),
       );
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  const handleMax = () => {
+    const free = parseFloat(balanceAvailable) || 0;
+    const feeN = parseFloat(fee) || 0;
+    setAmount(Math.max(0, free - feeN));
   };
 
   useEffect(() => {
@@ -179,9 +233,24 @@ function SendFinalStep() {
       <Header title="Send" />
       <p className="text-xs text-white/50 mt-1 px-1">
         Network: <span className="text-primary">{selectedNetworkLabel}</span>
-        {" · "}
-        Balance: {balance} WART
       </p>
+      <div className="mt-2 px-1">
+        <SpendableBalanceDisplay
+          layout="stack"
+          label="Available"
+          available={balanceAvailable}
+          locked={balanceLocked}
+          total={balance}
+          unit="WART"
+        />
+        <button
+          type="button"
+          className="text-xs text-primary underline mt-1"
+          onClick={handleMax}
+        >
+          Use max available
+        </button>
+      </div>
 
       <div className="flex flex-col gap-1">
         <p className="text-white text-sm">From</p>

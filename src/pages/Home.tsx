@@ -29,6 +29,8 @@ const Home: React.FC<Props> = ({ setSelectedActivity }) => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<Tab>(Tab.Tokens);
   const [balance, setBalance] = useState(0);
+  const [balanceAvailable, setBalanceAvailable] = useState(0);
+  const [balanceLocked, setBalanceLocked] = useState(0);
   const [balanceUSD, setBalanceUSD] = useState(0);
   const [balanceError, setBalanceError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -53,7 +55,10 @@ const Home: React.FC<Props> = ({ setSelectedActivity }) => {
     if (!wallet || !nodeUrl) return;
     try {
       const result = await fetchBalanceAndPin(nodeUrl, wallet);
+      // USD / total holdings use total; primary display uses available
       setBalance(parseFloat(result.balance) || 0);
+      setBalanceAvailable(parseFloat(result.available) || 0);
+      setBalanceLocked(parseFloat(result.locked) || 0);
       setBalanceError(null);
     } catch (error) {
       console.error("Error fetching balance:", error);
@@ -126,6 +131,9 @@ const Home: React.FC<Props> = ({ setSelectedActivity }) => {
         </div>
         <Balance
           balance={balance}
+          available={balanceAvailable}
+          locked={balanceLocked}
+          total={balance}
           usdValue={balanceUSD}
           isTestnet={isTestnet}
           refreshing={refreshing}
@@ -146,7 +154,10 @@ const Home: React.FC<Props> = ({ setSelectedActivity }) => {
       {activeTab === Tab.Tokens ? (
         <TokenItem
           token="WART"
-          balance={balance}
+          balance={balanceAvailable}
+          available={balanceAvailable}
+          locked={balanceLocked}
+          total={balance}
           usdValue={balanceUSD || 0}
         />
       ) : (
