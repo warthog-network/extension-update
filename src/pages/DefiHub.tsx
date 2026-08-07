@@ -64,6 +64,12 @@ import {
 } from "../utils/numberDisplay";
 import TransactionHistoryPanel from "../components/TransactionHistoryPanel";
 import SwapDexPanel from "../components/SwapDexPanel";
+import {
+  isWebAuthnAvailable,
+  inspectWalletBlob,
+} from "../utils/passkeyWallet";
+import { clearPasskeyWaiting, paintPasskeyWaiting } from "../utils/passkeyUi";
+import { loadNamedWalletEncrypted } from "../utils/warthogWalletCrypto";
 
 type MainTab =
   | "overview"
@@ -126,6 +132,7 @@ function DefiHub() {
     getAccountFromIndex,
     selectedWalletIndex,
     privateKey,
+    enablePasskeyOnCurrentWallet,
   } = useWallet();
 
   const nodeUrl =
@@ -216,13 +223,108 @@ function DefiHub() {
     loadNumberDisplayPrefs(),
   );
 
+  // Passkey / 2FA (Tools — wartbunker parity)
+  const [passkeysSupported] = useState(() => isWebAuthnAvailable());
+  const [hasPasskey, setHasPasskey] = useState(false);
+  const [hasPasswordAuth, setHasPasswordAuth] = useState(false);
+  const [require2faActive, setRequire2faActive] = useState(false);
+  const [want2fa, setWant2fa] = useState(false);
+  const [passkeyPassword, setPasskeyPassword] = useState("");
+  const [passkeyBusy, setPasskeyBusy] = useState(false);
+  const [awaitingPasskey, setAwaitingPasskey] = useState(false);
+
+  const refreshPasskeyStatus = useCallback(async () => {
+    const tag = (name || "").trim();
+    if (!tag) {
+      setHasPasskey(false);
+      setHasPasswordAuth(false);
+      setRequire2faActive(false);
+      return;
+    }
+    try {
+      const raw = await loadNamedWalletEncrypted(tag);
+      const info = inspectWalletBlob(raw);
+      setHasPasskey(Boolean(info.hasPasskey));
+      setHasPasswordAuth(Boolean(info.hasPassword));
+      setRequire2faActive(Boolean(info.require2fa));
+      if (info.require2fa) setWant2fa(true);
+    } catch {
+      setHasPasskey(false);
+      setHasPasswordAuth(false);
+      setRequire2faActive(false);
+    }
+  }, [name]);
+
+  useEffect(() => {
+    if (tab === "tools") void refreshPasskeyStatus();
+  }, [tab, refreshPasskeyStatus, wallet, privateKey]);
+
+  const handleEnablePasskey = async (force2fa?: boolean) => {
+    if (!wallet || !privateKey) {
+      setError("Unlock your wallet first");
+      return;
+    }
+    if (!passkeysSupported) {
+      setError("Passkeys need HTTPS and a modern browser");
+      return;
+    }
+    const twoFactor = Boolean(force2fa ?? want2fa);
+    const pwd = passkeyPassword.trim() || null;
+    if (twoFactor && !pwd && !hasPasswordAuth) {
+      setError("2FA needs a password — enter it below");
+      return;
+    }
+    setError(null);
+    setStatus(null);
+    try {
+      await paintPasskeyWaiting(setAwaitingPasskey, setPasskeyBusy);
+      const ok = await enablePasskeyOnCurrentWallet({
+        password: pwd,
+        name: name || "Main",
+        preferFingerprint: false,
+        require2fa: twoFactor,
+      });
+      if (ok) {
+        setStatus(
+          twoFactor
+            ? `2FA enabled for “${name || "Main"}” — next login: password + passkey`
+            : hasPasskey
+              ? `Passkey re-registered for “${name || "Main"}”`
+              : `Passkey enabled for “${name || "Main"}” — next login: Unlock with passkey`,
+        );
+        setPasskeyPassword("");
+        await refreshPasskeyStatus();
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not enable passkey");
+    } finally {
+      clearPasskeyWaiting(setAwaitingPasskey, setPasskeyBusy);
+    }
+  };
+
   const patchNumPrefs = (patch: Partial<NumberDisplayPrefs>) => {
     setNumPrefs((prev) => saveNumberDisplayPrefs({ ...prev, ...patch }));
   };
 
   const getPk = useCallback((): string => {
-    if (privateKey) return privateKey;
-    return getAccountFromIndex(selectedWalletIndex).getPrivateKeyHex();
+    if (privateKey?.trim()) return privateKey.trim().replace(/^0x/i, "");
+    const acct = getAccountFromIndex(selectedWalletIndex) as unknown as {
+      getPrivateKeyHex?: () => string;
+      privateKeyHex?: string;
+    };
+    let pk = "";
+    try {
+      if (typeof acct.getPrivateKeyHex === "function") {
+        pk = acct.getPrivateKeyHex() || "";
+      }
+    } catch {
+      pk = "";
+    }
+    if (!pk && acct.privateKeyHex) pk = acct.privateKeyHex;
+    if (!pk) {
+      throw new Error("Wallet locked — unlock to sign DeFi transactions");
+    }
+    return String(pk).replace(/^0x/i, "");
   }, [privateKey, getAccountFromIndex, selectedWalletIndex]);
 
   const clearMsg = () => {
@@ -1505,10 +1607,12 @@ function DefiHub() {
                   onClick={() =>
                     run(async () => {
                       if (!wallet || !nodeUrl) return;
+                      const decRaw = parseInt(createDecimals, 10);
+                      const decimals = Number.isFinite(decRaw) ? decRaw : 8;
                       const r = await createAssetTx(nodeUrl, getPk(), wallet, {
                         name: createName,
                         supply: createSupply,
-                        decimals: parseInt(createDecimals, 10) || 8,
+                        decimals,
                         fee,
                       });
                       setStatus(`Created · ${r.txHash || "ok"}`);
@@ -1855,9 +1959,126 @@ function DefiHub() {
         </>
       )}
 
-      {/* ════════ TOOLS — number display (mobile parity) ════════ */}
+      {/* ════════ TOOLS — passkey/2FA + number display (wartbunker parity) ════════ */}
       {tab === "tools" && (
         <>
+          {wallet && privateKey ? (
+            <section
+              className="defi-section"
+              style={{
+                borderColor: require2faActive
+                  ? "rgba(56, 189, 248, 0.4)"
+                  : hasPasskey
+                    ? "rgba(52, 211, 153, 0.35)"
+                    : "rgba(245, 158, 11, 0.45)",
+              }}
+            >
+              <div className="defi-section-header">
+                <div className="defi-section-header-left">
+                  <span className="defi-section-title defi-section-title-dex">
+                    Passkey &amp; 2FA login
+                  </span>
+                </div>
+              </div>
+              <div className="defi-section-body">
+                <p className="defi-hint text-left mt-0 mb-2">
+                  Enable one-tap passkey unlock, or require password + passkey
+                  (2FA) — same options as wartbunker Tools.
+                </p>
+                {!passkeysSupported ? (
+                  <p className="defi-error text-left">
+                    Passkeys need HTTPS and a modern browser.
+                  </p>
+                ) : (
+                  <>
+                    {require2faActive ? (
+                      <p className="defi-hint text-left mt-0 mb-2" style={{ color: "#7dd3fc" }}>
+                        ✓ 2FA active{name ? <> for <span className="font-mono">{name}</span></> : null}
+                        {" "}— password then passkey at login
+                      </p>
+                    ) : hasPasskey ? (
+                      <p className="defi-hint text-left mt-0 mb-2" style={{ color: "#6ee7b7" }}>
+                        ✓ Passkey enabled{name ? <> for <span className="font-mono">{name}</span></> : null}
+                      </p>
+                    ) : (
+                      <p className="defi-hint text-left mt-0 mb-2">
+                        Not enabled yet for this saved name.
+                      </p>
+                    )}
+
+                    <label className="defi-check-row">
+                      <span
+                        className={`defi-check ${want2fa ? "defi-check-on" : ""}`}
+                        onClick={() => setWant2fa(!want2fa)}
+                      />
+                      <span onClick={() => setWant2fa(!want2fa)}>
+                        Require 2FA — password and passkey every login
+                      </span>
+                    </label>
+
+                    {(want2fa || !hasPasswordAuth) && (
+                      <>
+                        <label className="defi-label">
+                          Wallet password
+                          {want2fa ? " (required for 2FA)" : " (optional)"}
+                        </label>
+                        <input
+                          className="defi-input"
+                          type="password"
+                          autoComplete="current-password"
+                          value={passkeyPassword}
+                          onChange={(e) => setPasskeyPassword(e.target.value)}
+                          placeholder={want2fa ? "Password for 2FA" : "Optional"}
+                          disabled={passkeyBusy}
+                        />
+                      </>
+                    )}
+
+                    <button
+                      type="button"
+                      className="defi-btn-primary"
+                      disabled={passkeyBusy || !passkeysSupported}
+                      onClick={() => void handleEnablePasskey(want2fa)}
+                    >
+                      {awaitingPasskey || passkeyBusy
+                        ? "Waiting for passkey…"
+                        : want2fa
+                          ? hasPasskey
+                            ? "Update passkey + keep 2FA"
+                            : "Enable passkey with 2FA"
+                          : hasPasskey
+                            ? "Re-register passkey"
+                            : "Enable passkey"}
+                    </button>
+
+                    {hasPasskey && !require2faActive ? (
+                      <button
+                        type="button"
+                        className="defi-compact-btn mt-2"
+                        style={{ width: "100%" }}
+                        disabled={passkeyBusy}
+                        onClick={() => {
+                          setWant2fa(true);
+                          void handleEnablePasskey(true);
+                        }}
+                      >
+                        Enable 2FA (password + passkey)
+                      </button>
+                    ) : null}
+                  </>
+                )}
+              </div>
+            </section>
+          ) : (
+            <section className="defi-section">
+              <div className="defi-section-body">
+                <p className="defi-hint text-left mt-0 mb-0">
+                  Unlock your wallet to enable passkey / 2FA login from Tools.
+                </p>
+              </div>
+            </section>
+          )}
+
           <section className="defi-section">
             <div className="defi-section-header">
               <div className="defi-section-header-left">

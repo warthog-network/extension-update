@@ -164,6 +164,8 @@ declare module "warthog-js" {
     pinHeight: number;
   };
 
+  export function serializeForApi(tx: TransactionJson): TransactionJson;
+
   export const KNOWN_NODES: string[];
   export function generateMnemonic(): string;
   export function encodeLimitPrice(

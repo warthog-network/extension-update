@@ -72,6 +72,8 @@ function AccountDetails() {
   const [passkeyBusy, setPasskeyBusy] = useState(false);
   const [awaitingPasskey, setAwaitingPasskey] = useState(false);
   const [hasPasskey, setHasPasskey] = useState(false);
+  const [require2faActive, setRequire2faActive] = useState(false);
+  const [want2fa, setWant2fa] = useState(false);
   const [passkeysSupported] = useState(() => isWebAuthnAvailable());
 
   const refreshPasskeyStatus = useCallback(async () => {
@@ -79,12 +81,17 @@ function AccountDetails() {
       const tag = (saveName || name || "").trim();
       if (!tag) {
         setHasPasskey(false);
+        setRequire2faActive(false);
         return;
       }
       const raw = await loadNamedWalletEncrypted(tag);
-      setHasPasskey(Boolean(inspectNamedBlob(raw).hasPasskey));
+      const info = inspectNamedBlob(raw);
+      setHasPasskey(Boolean(info.hasPasskey));
+      setRequire2faActive(Boolean(info.require2fa));
+      if (info.require2fa) setWant2fa(true);
     } catch {
       setHasPasskey(false);
+      setRequire2faActive(false);
     }
   }, [saveName, name]);
 
@@ -111,22 +118,29 @@ function AccountDetails() {
     }
   };
 
-  const handleEnablePasskey = async () => {
+  const handleEnablePasskey = async (force2fa?: boolean) => {
     setSaveErr(null);
     setSaveMsg(null);
+    const twoFactor = Boolean(force2fa ?? want2fa);
+    if (twoFactor && !password?.trim()) {
+      setSaveErr("2FA needs a password — enter it above");
+      return;
+    }
     try {
       await paintPasskeyWaiting(setAwaitingPasskey, setPasskeyBusy);
       const ok = await enablePasskeyOnCurrentWallet({
         password: password || null,
         name: saveName.trim() || name || "Main",
         preferFingerprint: false,
-        require2fa: false,
+        require2fa: twoFactor,
       });
       if (ok) {
         setSaveMsg(
-          hasPasskey
-            ? `Passkey re-registered for “${saveName.trim() || name}”`
-            : `Passkey enabled for “${saveName.trim() || name}” — next login: Unlock with passkey`,
+          twoFactor
+            ? `2FA enabled for “${saveName.trim() || name}” — password + passkey at login`
+            : hasPasskey
+              ? `Passkey re-registered for “${saveName.trim() || name}”`
+              : `Passkey enabled for “${saveName.trim() || name}” — next login: Unlock with passkey`,
         );
         await refreshPasskeyStatus();
       }
@@ -288,25 +302,44 @@ function AccountDetails() {
           {saving ? "Saving…" : "Save named wallet (password)"}
         </Button>
         {passkeysSupported && (
-          <Button
-            className="w-full"
-            variant="outline"
-            onClick={() => void handleEnablePasskey()}
-            disabled={passkeyBusy || saving || !saveName.trim()}
-          >
-            {awaitingPasskey
-              ? "Waiting for passkey…"
-              : hasPasskey
-                ? "Re-register passkey"
-                : "Enable passkey unlock"}
-          </Button>
+          <>
+            <label className="flex items-center gap-2 text-white/70 text-xs cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={want2fa}
+                onChange={(e) => setWant2fa(e.target.checked)}
+                disabled={passkeyBusy || saving}
+              />
+              Require 2FA (password + passkey)
+            </label>
+            <Button
+              className="w-full"
+              variant="outline"
+              onClick={() => void handleEnablePasskey(want2fa)}
+              disabled={passkeyBusy || saving || !saveName.trim()}
+            >
+              {awaitingPasskey
+                ? "Waiting for passkey…"
+                : want2fa
+                  ? hasPasskey
+                    ? "Update passkey + 2FA"
+                    : "Enable passkey with 2FA"
+                  : hasPasskey
+                    ? "Re-register passkey"
+                    : "Enable passkey unlock"}
+            </Button>
+          </>
         )}
-        {hasPasskey && (
+        {require2faActive ? (
+          <p className="text-sky-300/90 text-xs">
+            2FA active — enter password, then passkey on login.
+          </p>
+        ) : hasPasskey ? (
           <p className="text-emerald-400/80 text-xs">
             Passkey unlock is active for this name — use Unlock with passkey on
-            login.
+            login. Toggle 2FA above and re-enable to require password too.
           </p>
-        )}
+        ) : null}
         <Button className="w-full" variant="outline" onClick={handleDownloadFile}>
           Download warthog_wallet.txt
         </Button>

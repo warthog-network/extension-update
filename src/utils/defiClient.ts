@@ -15,6 +15,7 @@ import {
   WarthogApi,
   encodeLimitPrice,
   normalizeChainPin,
+  serializeForApi,
   type TransactionJson,
 } from "warthog-js";
 import { DEFAULT_TX_FEE } from "../config/network";
@@ -71,7 +72,15 @@ export type AssetInfo = {
   decimals?: number;
 };
 
+/** Prefer library serializer (bigint → number); fall back to shallow copy. */
 function serializeTx(tx: TransactionJson): TransactionJson {
+  try {
+    if (typeof serializeForApi === "function") {
+      return serializeForApi(tx) as TransactionJson;
+    }
+  } catch {
+    /* fall through */
+  }
   const out: Record<string, unknown> = { ...tx };
   for (const key of Object.keys(out)) {
     if (typeof out[key] === "bigint") {
@@ -116,11 +125,40 @@ export function bumpNonce(address: string, usedNonce: number): number {
   return next;
 }
 
+/**
+ * Resolve fee the node will accept — prefer encode16bit (same as wartbunker /
+ * mobile). Local ceil alone can disagree (e.g. 0.01 → 1000448 vs 999936).
+ */
 async function resolveFee(
   api: WarthogApi,
   feeInput?: string,
 ): Promise<RoundedFee> {
-  const feeStr = String(feeInput ?? DEFAULT_TX_FEE).trim() || DEFAULT_TX_FEE;
+  const feeStr =
+    String(feeInput ?? DEFAULT_TX_FEE)
+      .trim()
+      .replace(",", ".") || DEFAULT_TX_FEE;
+
+  // Node-authoritative compact fee (mainnet + DeFi shapes)
+  try {
+    const enc = await api.getNodePath(
+      `/tools/encode16bit/from_string/${encodeURIComponent(feeStr)}`,
+    );
+    if (enc.success) {
+      const data = enc.data as {
+        roundedE8?: number | string;
+        rounded?: { E8?: number | string };
+      };
+      const rounded = data.roundedE8 ?? data.rounded?.E8;
+      if (rounded != null) {
+        // Already node-rounded — floor re-round is idempotent on compact values
+        const fromNode = RoundedFee.fromE8(BigInt(rounded), false);
+        if (fromNode) return fromNode;
+      }
+    }
+  } catch {
+    // fall through to local rounding
+  }
+
   const preferred = Wart.parse(feeStr)?.roundedFee(true);
   if (!preferred) throw new Error(`Invalid fee "${feeStr}"`);
 
@@ -154,18 +192,54 @@ async function signAndSubmit(
   buildTx: BuildFn,
   opts?: { fee?: string; nonceId?: number },
 ): Promise<{ txHash: string; nonce: number }> {
+  if (!privateKeyHex || !String(privateKeyHex).trim()) {
+    throw new Error("Wallet locked — unlock to sign transactions");
+  }
   const api = createDefiApi(nodeBase);
   const fee = await resolveFee(api, opts?.fee);
   const nonceId = opts?.nonceId ?? getSmartNonce(address);
   const nonce = NonceId.fromNumber(nonceId);
   if (!nonce) throw new Error(`Invalid nonce ${nonceId}`);
 
-  const account = accountFromPrivateKey(privateKeyHex);
-  const ctx = await api.createTransactionContext(fee, nonce);
+  let account: Account;
+  try {
+    account = accountFromPrivateKey(privateKeyHex);
+  } catch (e) {
+    throw new Error(
+      e instanceof Error
+        ? `Invalid private key: ${e.message}`
+        : "Invalid private key",
+    );
+  }
+
+  let ctx: Awaited<ReturnType<WarthogApi["createTransactionContext"]>>;
+  try {
+    ctx = await api.createTransactionContext(fee, nonce);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    // Non-JSON / gateway HTML is a common extension failure mode
+    if (/JSON|Unexpected token|<!DOCTYPE|<html/i.test(msg)) {
+      throw new Error(
+        "Node returned a non-JSON response (gateway/offline). Try another DeFi node.",
+      );
+    }
+    throw new Error(msg || "Failed to build transaction context (pin/fee)");
+  }
+
   const tx = serializeTx(buildTx(ctx, account));
   const submit = await api.submitTransaction(tx);
   if (!submit.success) {
-    throw new Error(submit.error || "Node rejected transaction");
+    const err = submit.error || "Node rejected transaction";
+    // Surface fee/nonce hints like wartbunker
+    if (/fee/i.test(err)) {
+      throw new Error(`${err} — check fee (default ${DEFAULT_TX_FEE} WART)`);
+    }
+    if (/nonce/i.test(err)) {
+      throw new Error(
+        `${err} — try again; nonce was ${nonceId}. Refresh balance if this persists.`,
+      );
+    }
+    throw new Error(err);
   }
   const txHash =
     (submit.data as { txHash?: string })?.txHash ||
@@ -484,9 +558,15 @@ export async function createAssetTx(
   if (!assetName || assetName.length > 5) {
     throw new Error("Asset name must be 1–5 characters");
   }
-  const precisionValue = Math.min(Math.max(params.decimals || 8, 0), 18);
+  if (!Number.isInteger(params.decimals) || params.decimals < 0 || params.decimals > 18) {
+    throw new Error("Decimals must be a whole number from 0 to 18");
+  }
+  const precisionValue = Math.min(Math.max(params.decimals, 0), 18);
   const precision = new TokenPrecision(precisionValue);
-  const totalSupply = Funds.parse(String(params.supply).trim(), precision);
+  const totalSupply = Funds.parse(
+    String(params.supply).trim().replace(",", "."),
+    precision,
+  );
   if (!totalSupply) throw new Error("Invalid total supply");
 
   return signAndSubmit(
@@ -521,7 +601,7 @@ export async function transferAssetTx(
       : Address.fromRaw(cleanTo);
   if (!recipient) throw new Error("Invalid recipient address");
 
-  const amountStr = String(params.amount).trim();
+  const amountStr = String(params.amount).trim().replace(",", ".");
   return signAndSubmit(
     nodeBase,
     privateKeyHex,
@@ -558,10 +638,16 @@ export async function limitSwapTx(
 ) {
   const hash = normalizeAssetHash(params.assetHash);
   if (!isValidAssetHash(hash)) throw new Error("Invalid asset hash");
+  // Prefer pre-encoded 6-char hex (SwapDex encodes with buy=ceil). Re-encode with
+  // the same ceil rule as wartbunker if a human price string is passed.
   const limitHex =
     params.limitPrice.length === 6 && /^[0-9a-f]+$/i.test(params.limitPrice)
       ? params.limitPrice.toLowerCase()
-      : encodeLimitPriceHex(params.limitPrice, params.assetDecimals);
+      : encodeLimitPriceHex(
+          params.limitPrice,
+          params.assetDecimals,
+          params.isBuy,
+        );
   const limit = Price.fromHex(limitHex);
   if (!limit) throw new Error("Invalid limit price encoding");
   const amountStr = String(params.amount).trim().replace(",", ".");
