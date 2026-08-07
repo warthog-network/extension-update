@@ -21,21 +21,16 @@ import {
   cancelOrderTx,
   computePoolSpotPrice,
   createAssetTx,
-  depositLiquidityTx,
-  encodeLimitPriceHex,
   fetchAssetBalance,
-  fetchLiquidityBalance,
   fetchLiquidityPositions,
   getDexMarket,
   getOpenOrders,
   getSmartNonce,
   isValidAssetHash,
-  limitSwapTx,
   lookupAsset,
   normalizeAssetHash,
   searchAssetsDetailed,
   transferAssetTx,
-  withdrawLiquidityTx,
   type AssetInfo,
   type DefiAssetBalance,
   type LiquidityPosition,
@@ -68,6 +63,7 @@ import {
   type NumberNotation,
 } from "../utils/numberDisplay";
 import TransactionHistoryPanel from "../components/TransactionHistoryPanel";
+import SwapDexPanel from "../components/SwapDexPanel";
 
 type MainTab =
   | "overview"
@@ -77,7 +73,6 @@ type MainTab =
   | "dex"
   | "tools";
 type AssetsSub = "create" | "search";
-type DexSub = "limit" | "liquidity" | "market";
 
 const WATCHED_KEY = (addr: string) =>
   `warthogWatchedAssets_${addr.toLowerCase()}`;
@@ -195,11 +190,14 @@ function DefiHub() {
   const [searchResults, setSearchResults] = useState<AssetInfo[]>([]);
   const [lookupResult, setLookupResult] = useState<unknown>(null);
 
-  // DEX
-  const [dexSub, setDexSub] = useState<DexSub>("limit");
+  // DEX (swap panel + optional price chart)
   const [dexHash, setDexHash] = useState("");
   const [dexName, setDexName] = useState("");
   const [dexDecimals, setDexDecimals] = useState("8");
+  const [dexPrefillKey, setDexPrefillKey] = useState(0);
+  const [dexInitialMode, setDexInitialMode] = useState<
+    "market" | "limit" | "pool"
+  >("market");
   const [marketData, setMarketData] = useState<Record<string, unknown> | null>(
     null,
   );
@@ -212,15 +210,6 @@ function DefiHub() {
   const [chartError, setChartError] = useState<string | null>(null);
   const [chartNote, setChartNote] = useState<string | null>(null);
   const [chartPoolSpot, setChartPoolSpot] = useState<number | null>(null);
-  const [lpBalance, setLpBalance] = useState<string | null>(null);
-  const [limitMode, setLimitMode] = useState<"buy" | "sell">("buy");
-  const [limitAmount, setLimitAmount] = useState("");
-  const [limitPrice, setLimitPrice] = useState("");
-  const [limitEncoded, setLimitEncoded] = useState("");
-  const [liqMode, setLiqMode] = useState<"deposit" | "withdraw">("deposit");
-  const [lpAssetAmt, setLpAssetAmt] = useState("");
-  const [lpWartAmt, setLpWartAmt] = useState("");
-  const [lpShares, setLpShares] = useState("");
 
   // Number display (Tools)
   const [numPrefs, setNumPrefs] = useState<NumberDisplayPrefs>(() =>
@@ -497,13 +486,18 @@ function DefiHub() {
     setTab("send-asset");
   };
 
-  const openDexFor = (hash: string, assetName: string, decimals = 8) => {
+  const openDexFor = (
+    hash: string,
+    assetName: string,
+    decimals = 8,
+    mode: "market" | "limit" | "pool" = "market",
+  ) => {
     setDexHash(hash);
     setDexName(assetName);
     setDexDecimals(String(decimals));
+    setDexInitialMode(mode);
+    setDexPrefillKey((k) => k + 1);
     setTab("dex");
-    // Jump to Market so the chart is visible; limit/LP still one subtab away.
-    setDexSub("market");
     void loadChart(hash, { interval: chartInterval, mode: chartMode });
   };
 
@@ -1253,8 +1247,7 @@ function DefiHub() {
                         type="button"
                         className="defi-compact-btn"
                         onClick={() => {
-                          openDexFor(pos.hash, pos.name, pos.decimals);
-                          setDexSub("liquidity");
+                          openDexFor(pos.hash, pos.name, pos.decimals, "pool");
                         }}
                       >
                         Manage in DEX
@@ -1692,514 +1685,42 @@ function DefiHub() {
         </>
       )}
 
-      {/* ════════ DEX ════════ */}
+      {/* ════════ DEX — swap interface (wartbunker parity) ════════ */}
       {tab === "dex" && (
         <>
-          <div className="defi-subtabs">
-            {(
-              [
-                ["limit", "Limit Order"],
-                ["liquidity", "Liquidity"],
-                ["market", "Market"],
-              ] as const
-            ).map(([id, label]) => (
-              <button
-                key={id}
-                type="button"
-                className={`defi-compact-btn ${dexSub === id ? "defi-compact-btn-active" : ""}`}
-                onClick={() => setDexSub(id)}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+          <SwapDexPanel
+            key={`dex-${dexPrefillKey}-${dexHash || "none"}`}
+            nodeUrl={nodeUrl}
+            wallet={wallet || ""}
+            getPk={getPk}
+            fee={fee}
+            onFeeChange={setFee}
+            wartAvailable={wartAvailable}
+            wartLocked={wartLocked}
+            wartBalance={wartBalance}
+            assetBalances={assetBalances}
+            prefillHash={dexHash || undefined}
+            prefillName={dexName || undefined}
+            prefillDecimals={parseInt(dexDecimals, 10) || 8}
+            busy={busy}
+            setBusy={setBusy}
+            setStatus={setStatus}
+            setError={setError}
+            onSuccess={async () => {
+              await refreshBalance();
+              await refreshAssets();
+              await refreshOrders();
+            }}
+            onAssetChange={(hash, name, decimals) => {
+              setDexHash(hash);
+              setDexName(name);
+              setDexDecimals(String(decimals));
+            }}
+            initialMode={dexInitialMode}
+          />
 
-          <section className="defi-section">
-            <div className="defi-section-header">
-              <span className="defi-section-title defi-section-title-dex">
-                Pool / Asset
-              </span>
-            </div>
-            <div className="defi-section-body">
-              <label className="defi-label">Asset hash</label>
-              <input
-                className="defi-input"
-                value={dexHash}
-                onChange={(e) => setDexHash(e.target.value)}
-              />
-              <label className="defi-label">Name</label>
-              <input
-                className="defi-input"
-                value={dexName}
-                onChange={(e) => setDexName(e.target.value)}
-              />
-              <label className="defi-label">Decimals</label>
-              <input
-                className="defi-input"
-                value={dexDecimals}
-                onChange={(e) => setDexDecimals(e.target.value)}
-              />
-              <button
-                type="button"
-                className="defi-btn-primary"
-                disabled={busy}
-                onClick={() =>
-                  run(async () => {
-                    if (!nodeUrl || !wallet) return;
-                    const m = (await getDexMarket(
-                      nodeUrl,
-                      dexHash,
-                    )) as Record<string, unknown>;
-                    setMarketData(m);
-                    const asset = (m.baseAsset || m.asset) as {
-                      name?: string;
-                      decimals?: number;
-                    };
-                    if (asset?.name) setDexName(String(asset.name));
-                    if (asset?.decimals != null)
-                      setDexDecimals(String(asset.decimals));
-                    const spot = computePoolSpotPrice(m);
-                    if (spot != null && spot > 0) setLimitPrice(String(spot));
-                    const lp = await fetchLiquidityBalance(
-                      nodeUrl,
-                      wallet,
-                      dexHash,
-                    );
-                    setLpBalance(lp?.balance ?? null);
-                    if (lp) {
-                      setDexName(lp.name);
-                      setDexDecimals(String(lp.decimals));
-                    }
-                    await loadChart(dexHash, {
-                      interval: chartInterval,
-                      mode: chartMode,
-                    });
-                  }, "Market loaded")
-                }
-              >
-                Load market
-              </button>
-              {lpBalance != null && (
-                <div className="defi-lp-shares mt-3">
-                  <div className="defi-lp-shares-label">Your LP shares</div>
-                  <div className="defi-lp-shares-value">{lpBalance}</div>
-                  <div className="defi-lp-shares-footer">
-                    Redeemable in {dexName || "asset"} pool. Withdraw below to
-                    receive asset + WART.
-                  </div>
-                </div>
-              )}
-              {marketData && (
-                <div className="defi-stat-grid mt-2">
-                  {(() => {
-                    const pool = (marketData.liquidityPool ||
-                      marketData.liquidity ||
-                      {}) as Record<string, unknown>;
-                    return (
-                      <>
-                        <div className="defi-stat-box">
-                          <div className="defi-stat-label">WART</div>
-                          <div className="defi-stat-value">
-                            {String(
-                              (pool.wart as { str?: string })?.str ||
-                                pool.wart ||
-                                pool.WART ||
-                                "—",
-                            )}
-                          </div>
-                        </div>
-                        <div className="defi-stat-box">
-                          <div className="defi-stat-label">Asset</div>
-                          <div className="defi-stat-value">
-                            {String(
-                              (pool.asset as { str?: string })?.str ||
-                                pool.asset ||
-                                "—",
-                            )}
-                          </div>
-                        </div>
-                        <div className="defi-stat-box">
-                          <div className="defi-stat-label">Spot</div>
-                          <div className="defi-stat-value">
-                            {(() => {
-                              const s = computePoolSpotPrice(marketData);
-                              return s != null ? s.toPrecision(4) : "—";
-                            })()}
-                          </div>
-                        </div>
-                      </>
-                    );
-                  })()}
-                </div>
-              )}
-            </div>
-          </section>
-
-          {dexSub === "limit" && (
-            <section className="defi-section">
-              <div className="defi-section-header">
-                <span className="defi-section-title defi-section-title-orders">
-                  Limit Order
-                </span>
-              </div>
-              <div className="defi-section-body">
-                <div className="defi-subtabs">
-                  <button
-                    type="button"
-                    className={`defi-compact-btn ${limitMode === "buy" ? "defi-compact-btn-buy" : ""}`}
-                    onClick={() => setLimitMode("buy")}
-                  >
-                    BUY
-                  </button>
-                  <button
-                    type="button"
-                    className={`defi-compact-btn ${limitMode === "sell" ? "defi-compact-btn-sell" : ""}`}
-                    onClick={() => setLimitMode("sell")}
-                  >
-                    SELL
-                  </button>
-                </div>
-                <div
-                  className="defi-encoder"
-                  style={{
-                    borderColor:
-                      limitMode === "buy"
-                        ? "rgba(52, 211, 153, 0.45)"
-                        : "rgba(251, 113, 133, 0.45)",
-                  }}
-                >
-                  <div className="defi-encoder-title">
-                    Quick Limit Price Encoder
-                  </div>
-                  <p className="defi-encoder-hint">
-                    Price in WART per {dexName || "asset"}, then Encode → 6-char
-                    hex.
-                  </p>
-                  <label className="defi-label">Price</label>
-                  <input
-                    className="defi-input"
-                    value={limitPrice}
-                    onChange={(e) => setLimitPrice(e.target.value)}
-                    placeholder="e.g. 0.0005"
-                  />
-                  <div className="defi-field-row">
-                    <div>
-                      <label className="defi-label">Decimals</label>
-                      <input
-                        className="defi-input"
-                        value={dexDecimals}
-                        onChange={(e) => setDexDecimals(e.target.value)}
-                      />
-                    </div>
-                    <div className="pb-2">
-                      <button
-                        type="button"
-                        className="defi-compact-btn defi-compact-btn-active w-full"
-                        onClick={() => {
-                          try {
-                            setLimitEncoded(
-                              encodeLimitPriceHex(
-                                limitPrice,
-                                parseInt(dexDecimals, 10) || 8,
-                              ),
-                            );
-                            setStatus("Encoded");
-                          } catch (e) {
-                            setError(
-                              e instanceof Error ? e.message : "Encode failed",
-                            );
-                          }
-                        }}
-                      >
-                        Encode
-                      </button>
-                    </div>
-                  </div>
-                  {limitEncoded && (
-                    <div className="defi-encoder-result">
-                      limit hex: {limitEncoded}
-                    </div>
-                  )}
-                </div>
-                <label className="defi-label">
-                  Amount ({limitMode === "buy" ? "WART" : dexName || "token"})
-                </label>
-                {limitMode === "buy" ? (
-                  <div className="mb-1">
-                    <SpendableBalanceDisplay
-                      layout="stack"
-                      label="Available WART"
-                      available={wartAvailable}
-                      locked={wartLocked}
-                      total={wartBalance}
-                      unit="WART"
-                    />
-                    <button
-                      type="button"
-                      className="defi-compact-btn mb-2"
-                      onClick={() => setLimitAmount(wartAvailable)}
-                    >
-                      Max available
-                    </button>
-                  </div>
-                ) : (
-                  (() => {
-                    const tokenBal = assetBalances.find(
-                      (a) =>
-                        a.hash.toLowerCase() ===
-                        normalizeAssetHash(dexHash),
-                    );
-                    const free =
-                      tokenBal?.available ?? tokenBal?.balance ?? "0";
-                    const locked = tokenBal?.locked ?? "0";
-                    const total = tokenBal?.balance ?? free;
-                    return (
-                      <div className="mb-1">
-                        <SpendableBalanceDisplay
-                          layout="stack"
-                          label={`Available ${dexName || "token"}`}
-                          available={free}
-                          locked={locked}
-                          total={total}
-                          unit={dexName || undefined}
-                        />
-                        {tokenBal ? (
-                          <button
-                            type="button"
-                            className="defi-compact-btn mb-2"
-                            onClick={() => setLimitAmount(free)}
-                          >
-                            Max available
-                          </button>
-                        ) : null}
-                      </div>
-                    );
-                  })()
-                )}
-                <input
-                  className="defi-input"
-                  value={limitAmount}
-                  onChange={(e) => setLimitAmount(e.target.value)}
-                />
-                <label className="defi-label">Encoded limit (6 hex)</label>
-                <input
-                  className="defi-input"
-                  value={limitEncoded}
-                  onChange={(e) => setLimitEncoded(e.target.value)}
-                />
-                <label className="defi-label">Fee (WART)</label>
-                <input
-                  className="defi-input"
-                  value={fee}
-                  onChange={(e) => setFee(e.target.value)}
-                />
-                <button
-                  type="button"
-                  className="defi-btn-primary"
-                  disabled={busy}
-                  onClick={() =>
-                    run(async () => {
-                      if (!wallet || !nodeUrl) return;
-                      if (!limitEncoded.trim()) {
-                        throw new Error("Encode a limit price first");
-                      }
-                      if (!limitAmount || parseFloat(limitAmount) <= 0) {
-                        throw new Error("Enter a valid amount");
-                      }
-
-                      const isBuy = limitMode === "buy";
-                      let free: string;
-                      let locked: string;
-                      let unit: string;
-
-                      if (isBuy) {
-                        // Live re-fetch WART free balance
-                        try {
-                          const live = await fetchBalanceAndPin(
-                            nodeUrl,
-                            wallet,
-                          );
-                          free = live.available;
-                          locked = live.locked;
-                          setWartBalance(live.balance);
-                          setWartAvailable(live.available);
-                          setWartLocked(live.locked);
-                        } catch {
-                          free = wartAvailable;
-                          locked = wartLocked;
-                        }
-                        unit = "WART";
-                      } else {
-                        try {
-                          const live = await fetchAssetBalance(
-                            nodeUrl,
-                            wallet,
-                            dexHash,
-                          );
-                          free = live.available;
-                          locked = live.locked;
-                        } catch {
-                          const tokenBal = assetBalances.find(
-                            (a) =>
-                              a.hash.toLowerCase() ===
-                              normalizeAssetHash(dexHash),
-                          );
-                          free =
-                            tokenBal?.available ?? tokenBal?.balance ?? "0";
-                          locked = tokenBal?.locked ?? "0";
-                        }
-                        unit = dexName || "token";
-                      }
-
-                      if (amountExceedsAvailable(limitAmount, free)) {
-                        setLimitAmount(free);
-                        throw new Error(
-                          insufficientFreeBalanceMessage({
-                            available: free,
-                            locked,
-                            unit,
-                          }),
-                        );
-                      }
-
-                      try {
-                        const r = await limitSwapTx(
-                          nodeUrl,
-                          getPk(),
-                          wallet,
-                          {
-                            assetHash: dexHash,
-                            isBuy,
-                            amount: limitAmount,
-                            assetDecimals: parseInt(dexDecimals, 10) || 8,
-                            limitPrice: limitEncoded.trim(),
-                            fee,
-                          },
-                        );
-                        setStatus(
-                          `${limitMode.toUpperCase()} · ${r.txHash || "ok"}`,
-                        );
-                        setLimitAmount("");
-                        setLimitEncoded("");
-                        await refreshBalance();
-                        await refreshAssets();
-                      } catch (e) {
-                        throw new Error(
-                          mapInsufficientBalanceError(e, {
-                            available: free,
-                            locked,
-                            unit,
-                          }),
-                        );
-                      }
-                    })
-                  }
-                >
-                  Place {limitMode} order
-                </button>
-              </div>
-            </section>
-          )}
-
-          {dexSub === "liquidity" && (
-            <section className="defi-section">
-              <div className="defi-section-header">
-                <span className="defi-section-title defi-section-title-liquidity">
-                  Liquidity
-                </span>
-              </div>
-              <div className="defi-section-body">
-                <div className="defi-subtabs">
-                  <button
-                    type="button"
-                    className={`defi-compact-btn ${liqMode === "deposit" ? "defi-compact-btn-active" : ""}`}
-                    onClick={() => setLiqMode("deposit")}
-                  >
-                    Deposit
-                  </button>
-                  <button
-                    type="button"
-                    className={`defi-compact-btn ${liqMode === "withdraw" ? "defi-compact-btn-active" : ""}`}
-                    onClick={() => setLiqMode("withdraw")}
-                  >
-                    Withdraw
-                  </button>
-                </div>
-                {liqMode === "deposit" ? (
-                  <>
-                    <label className="defi-label">Asset amount</label>
-                    <input
-                      className="defi-input"
-                      value={lpAssetAmt}
-                      onChange={(e) => setLpAssetAmt(e.target.value)}
-                    />
-                    <label className="defi-label">WART amount</label>
-                    <input
-                      className="defi-input"
-                      value={lpWartAmt}
-                      onChange={(e) => setLpWartAmt(e.target.value)}
-                    />
-                    <button
-                      type="button"
-                      className="defi-btn-primary"
-                      disabled={busy}
-                      onClick={() =>
-                        run(async () => {
-                          if (!wallet || !nodeUrl) return;
-                          const r = await depositLiquidityTx(
-                            nodeUrl,
-                            getPk(),
-                            wallet,
-                            {
-                              assetHash: dexHash,
-                              assetAmount: lpAssetAmt,
-                              wartAmount: lpWartAmt,
-                              decimals: parseInt(dexDecimals, 10) || 8,
-                              fee,
-                            },
-                          );
-                          setStatus(`LP deposit · ${r.txHash || "ok"}`);
-                        })
-                      }
-                    >
-                      Deposit liquidity
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <label className="defi-label">LP shares</label>
-                    <input
-                      className="defi-input"
-                      value={lpShares}
-                      onChange={(e) => setLpShares(e.target.value)}
-                    />
-                    <button
-                      type="button"
-                      className="defi-btn-primary"
-                      disabled={busy}
-                      onClick={() =>
-                        run(async () => {
-                          if (!wallet || !nodeUrl) return;
-                          const r = await withdrawLiquidityTx(
-                            nodeUrl,
-                            getPk(),
-                            wallet,
-                            { assetHash: dexHash, shares: lpShares, fee },
-                          );
-                          setStatus(`LP withdraw · ${r.txHash || "ok"}`);
-                        })
-                      }
-                    >
-                      Withdraw liquidity
-                    </button>
-                  </>
-                )}
-              </div>
-            </section>
-          )}
-
-          {dexSub === "market" && (
-            <section className="defi-section">
+          {dexHash && (
+            <section className="defi-section mt-3">
               <div className="defi-section-header">
                 <span className="defi-section-title defi-section-title-dex">
                   Price chart
@@ -2207,8 +1728,8 @@ function DefiHub() {
               </div>
               <div className="defi-section-body">
                 <p className="defi-hint text-left mt-0">
-                  Same data path as WartBunker: node{" "}
-                  <code>/chart/*</code>, then recent matches, then pool spot.
+                  Same data path as WartBunker: node <code>/chart/*</code>, then
+                  recent matches, then pool spot.
                 </p>
                 <div className="defi-subtabs">
                   {(
@@ -2300,9 +1821,6 @@ function DefiHub() {
                         if (asset?.name) setDexName(String(asset.name));
                         if (asset?.decimals != null)
                           setDexDecimals(String(asset.decimals));
-                        const spot = computePoolSpotPrice(m);
-                        if (spot != null && spot > 0)
-                          setLimitPrice(String(spot));
                         await loadChart(dexHash, {
                           interval: chartInterval,
                           mode: chartMode,
@@ -2331,16 +1849,6 @@ function DefiHub() {
                     (marketData ? computePoolSpotPrice(marketData) : null)
                   }
                 />
-                {marketData && (
-                  <details className="mt-2">
-                    <summary className="defi-hint text-left cursor-pointer">
-                      Raw market JSON
-                    </summary>
-                    <pre className="defi-pre">
-                      {JSON.stringify(marketData, null, 2)}
-                    </pre>
-                  </details>
-                )}
               </div>
             </section>
           )}

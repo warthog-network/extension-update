@@ -26,9 +26,23 @@ import {
 import {
   decryptWallet,
   encryptWallet,
+  loadNamedWalletEncrypted,
   saveNamedWallet,
   type EncryptedWalletPayload,
 } from "../utils/warthogWalletCrypto";
+import {
+  buildEnvelopeWithPasskey,
+  decryptWithPasskey,
+  envelopeWithPassword,
+  inspectWalletBlob,
+  isWebAuthnAvailable,
+  serializeEnvelope,
+  setPasskeyProductName,
+  tryParseEnvelope,
+  unlockEnvelopeWith2fa,
+} from "../utils/passkeyWallet";
+
+setPasskeyProductName("Warthog Extension");
 
 interface WalletContextProps {
   seedPhrase: string | null;
@@ -82,8 +96,29 @@ interface WalletContextProps {
     password: string,
     walletName?: string | null,
   ) => Promise<void>;
+  /** Unlock a multi-auth envelope with WebAuthn passkey (optionally + password for 2FA). */
+  loginFromPasskey: (
+    encrypted: string,
+    walletName?: string | null,
+    password?: string | null,
+  ) => Promise<void>;
   /** Persist current key material as a named wallet (website format). */
-  saveCurrentAsNamedWallet: (walletName: string, password: string) => Promise<void>;
+  saveCurrentAsNamedWallet: (
+    walletName: string,
+    password?: string | null,
+    opts?: {
+      withPasskey?: boolean;
+      require2fa?: boolean;
+      preferFingerprint?: boolean;
+    },
+  ) => Promise<void>;
+  /** Add or re-register passkey unlock on the currently open named wallet. */
+  enablePasskeyOnCurrentWallet: (opts?: {
+    password?: string | null;
+    require2fa?: boolean;
+    preferFingerprint?: boolean;
+    name?: string | null;
+  }) => Promise<boolean>;
   activateKeyMaterial: (
     data: WalletKeyMaterial,
     opts?: { password?: string; name?: string },
@@ -422,11 +457,35 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({
     ensureDefaultNodes();
   };
 
+  const currentWalletPayload = (): EncryptedWalletPayload => {
+    if (!privateKey || !wallet) {
+      throw new Error("No active wallet to save");
+    }
+    const account = getAccountFromIndex(selectedWalletIndex);
+    return {
+      privateKey: account.getPrivateKeyHex(),
+      publicKey: account.getPublicKeyHex(),
+      address: account.getAddress(),
+      mnemonic: seedPhrase || undefined,
+    };
+  };
+
   const loginFromEncrypted = async (
     encrypted: string,
     pwd: string,
     walletName?: string | null,
   ): Promise<void> => {
+    const info = inspectWalletBlob(encrypted);
+    if (info.require2fa) {
+      throw new Error(
+        "This wallet requires password + passkey. Use Unlock with password + passkey.",
+      );
+    }
+    if (!info.hasPassword) {
+      throw new Error(
+        "This wallet has no password unlock — use passkey instead",
+      );
+    }
     const decrypted = decryptWallet(encrypted, pwd);
     const material: WalletKeyMaterial = {
       privateKey: decrypted.privateKey,
@@ -440,22 +499,141 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({
     });
   };
 
+  const loginFromPasskey = async (
+    encrypted: string,
+    walletName?: string | null,
+    pwd?: string | null,
+  ): Promise<void> => {
+    if (!isWebAuthnAvailable()) {
+      throw new Error(
+        "Passkey unlock needs a modern browser with WebAuthn support",
+      );
+    }
+    const info = inspectWalletBlob(encrypted);
+    if (!info.hasPasskey || !info.envelope?.passkey) {
+      throw new Error(
+        "This wallet has no passkey unlock — use password, or enable passkey after unlock",
+      );
+    }
+
+    let decrypted: EncryptedWalletPayload;
+    if (info.require2fa) {
+      if (!pwd) {
+        throw new Error(
+          "2FA wallet: enter password, then confirm with passkey",
+        );
+      }
+      decrypted = (await unlockEnvelopeWith2fa(
+        info.envelope,
+        pwd,
+        decryptWallet,
+      )) as EncryptedWalletPayload;
+    } else {
+      decrypted = (await decryptWithPasskey(
+        info.envelope.passkey,
+      )) as EncryptedWalletPayload;
+    }
+
+    const material: WalletKeyMaterial = {
+      privateKey: decrypted.privateKey,
+      publicKey: decrypted.publicKey,
+      address: decrypted.address,
+      mnemonic: decrypted.mnemonic,
+    };
+    await activateKeyMaterial(material, {
+      password: pwd || undefined,
+      name: walletName || "Account 0",
+    });
+  };
+
   const saveCurrentAsNamedWallet = async (
     walletName: string,
-    pwd: string,
+    pwd?: string | null,
+    opts?: {
+      withPasskey?: boolean;
+      require2fa?: boolean;
+      preferFingerprint?: boolean;
+    },
   ): Promise<void> => {
-    if (!privateKey || !wallet) {
-      throw new Error("No active wallet to save");
+    const payload = currentWalletPayload();
+    const trimmed = walletName.trim();
+    if (!trimmed) throw new Error("Wallet name is required");
+
+    const withPasskey = Boolean(opts?.withPasskey);
+    const require2fa = Boolean(opts?.require2fa);
+    const preferFingerprint = Boolean(opts?.preferFingerprint);
+
+    if (!pwd && !withPasskey) {
+      throw new Error("Password or passkey required to save");
     }
-    const account = getAccountFromIndex(selectedWalletIndex);
-    const payload: EncryptedWalletPayload = {
-      privateKey: account.getPrivateKeyHex(),
-      publicKey: account.getPublicKeyHex(),
-      address: account.getAddress(),
-      mnemonic: seedPhrase || undefined,
-    };
-    const encrypted = encryptWallet(payload, pwd);
-    await saveNamedWallet(walletName, encrypted);
+    if (require2fa && (!pwd || !withPasskey)) {
+      throw new Error("2FA needs both a password and passkey");
+    }
+
+    const existing = await loadNamedWalletEncrypted(trimmed);
+    const prevEnv = existing ? tryParseEnvelope(existing) : null;
+
+    let passwordCipher: string | null = pwd ? encryptWallet(payload, pwd) : null;
+    if (!passwordCipher && prevEnv?.password) passwordCipher = prevEnv.password;
+    if (!passwordCipher && existing && !prevEnv) passwordCipher = existing;
+
+    if (withPasskey) {
+      if (!isWebAuthnAvailable()) {
+        throw new Error("Passkey unlock needs HTTPS and a modern browser");
+      }
+      // passkeyWallet is a JS port; cast opts to avoid loose default-param inference
+      const { envelope } = (await buildEnvelopeWithPasskey(payload, {
+        displayName: trimmed,
+        existingPasswordCipher: passwordCipher,
+        previousEnvelope: prevEnv,
+        require2fa: require2fa && Boolean(passwordCipher || pwd),
+        preferFingerprint,
+      } as Record<string, unknown>)) as {
+        envelope: {
+          password: string | null;
+          require2fa: boolean;
+          [k: string]: unknown;
+        };
+      };
+      if (require2fa && pwd) {
+        envelope.password = encryptWallet(payload, pwd);
+        envelope.require2fa = true;
+      }
+      await saveNamedWallet(trimmed, serializeEnvelope(envelope));
+      return;
+    }
+
+    if (pwd) {
+      const cipher = encryptWallet(payload, pwd);
+      if (prevEnv?.passkey) {
+        const next = envelopeWithPassword(payload, cipher, prevEnv, {
+          require2fa,
+        });
+        await saveNamedWallet(trimmed, serializeEnvelope(next));
+      } else {
+        await saveNamedWallet(trimmed, cipher);
+      }
+    }
+  };
+
+  const enablePasskeyOnCurrentWallet = async (opts?: {
+    password?: string | null;
+    require2fa?: boolean;
+    preferFingerprint?: boolean;
+    name?: string | null;
+  }): Promise<boolean> => {
+    if (!privateKey || !wallet) {
+      throw new Error("Unlock your wallet first, then enable passkey");
+    }
+    const tag =
+      String(opts?.name || name || "").trim() || "Main";
+    await saveCurrentAsNamedWallet(tag, opts?.password ?? password, {
+      withPasskey: true,
+      require2fa: Boolean(opts?.require2fa),
+      preferFingerprint: Boolean(opts?.preferFingerprint),
+    });
+    if (!name) setName(tag);
+    return true;
   };
 
   const setToken = (t: string): void => {
@@ -603,8 +781,9 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({
       ? normalizeNodeUrl(nodeList[selectedNodeIndex] || nodeList[0])
       : null;
   const selectedNetworkLabel = networkLabel(selectedNodeUrl);
+  // Password or session token (passkey-only unlock sets token without password)
   const isAuthenticated = Boolean(
-    wallet && password && (seedPhrase || privateKey),
+    wallet && (password || token) && (seedPhrase || privateKey),
   );
   const canAddAccounts = Boolean(seedPhrase);
 
@@ -662,7 +841,9 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({
         importWallet,
         importPrivateKey,
         loginFromEncrypted,
+        loginFromPasskey,
         saveCurrentAsNamedWallet,
+        enablePasskeyOnCurrentWallet,
         activateKeyMaterial,
         setInputWordsBackup,
       }}

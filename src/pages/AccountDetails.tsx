@@ -1,11 +1,17 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import BackButton from "../components/BackButton";
 import Button from "../components/Button";
 import { useNavigate } from "react-router-dom";
 import useWallet from "../hooks/useWallet";
 import Jazzicon from "react-jazzicon/dist/Jazzicon";
 import { QRCodeSVG } from "qrcode.react";
-import { encryptWallet } from "../utils/warthogWalletCrypto";
+import {
+  encryptWallet,
+  loadNamedWalletEncrypted,
+  inspectNamedBlob,
+} from "../utils/warthogWalletCrypto";
+import { isWebAuthnAvailable } from "../utils/passkeyWallet";
+import { clearPasskeyWaiting, paintPasskeyWaiting } from "../utils/passkeyUi";
 
 function IconButton({
   iconSrc,
@@ -50,6 +56,7 @@ function AccountDetails() {
     setName,
     password,
     saveCurrentAsNamedWallet,
+    enablePasskeyOnCurrentWallet,
     seedPhrase,
     getAccountFromIndex,
   } = useWallet();
@@ -62,10 +69,32 @@ function AccountDetails() {
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
   const [saveErr, setSaveErr] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [passkeyBusy, setPasskeyBusy] = useState(false);
+  const [awaitingPasskey, setAwaitingPasskey] = useState(false);
+  const [hasPasskey, setHasPasskey] = useState(false);
+  const [passkeysSupported] = useState(() => isWebAuthnAvailable());
+
+  const refreshPasskeyStatus = useCallback(async () => {
+    try {
+      const tag = (saveName || name || "").trim();
+      if (!tag) {
+        setHasPasskey(false);
+        return;
+      }
+      const raw = await loadNamedWalletEncrypted(tag);
+      setHasPasskey(Boolean(inspectNamedBlob(raw).hasPasskey));
+    } catch {
+      setHasPasskey(false);
+    }
+  }, [saveName, name]);
+
+  useEffect(() => {
+    void refreshPasskeyStatus();
+  }, [refreshPasskeyStatus]);
 
   const handleSaveNamed = async () => {
     if (!password) {
-      setSaveErr("Unlock password missing — re-open the wallet");
+      setSaveErr("Unlock password missing — re-open the wallet or set a password");
       return;
     }
     setSaving(true);
@@ -74,10 +103,37 @@ function AccountDetails() {
     try {
       await saveCurrentAsNamedWallet(saveName.trim(), password);
       setSaveMsg(`Saved as "${saveName.trim()}" for quick login`);
+      await refreshPasskeyStatus();
     } catch (e) {
       setSaveErr(e instanceof Error ? e.message : "Save failed");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleEnablePasskey = async () => {
+    setSaveErr(null);
+    setSaveMsg(null);
+    try {
+      await paintPasskeyWaiting(setAwaitingPasskey, setPasskeyBusy);
+      const ok = await enablePasskeyOnCurrentWallet({
+        password: password || null,
+        name: saveName.trim() || name || "Main",
+        preferFingerprint: false,
+        require2fa: false,
+      });
+      if (ok) {
+        setSaveMsg(
+          hasPasskey
+            ? `Passkey re-registered for “${saveName.trim() || name}”`
+            : `Passkey enabled for “${saveName.trim() || name}” — next login: Unlock with passkey`,
+        );
+        await refreshPasskeyStatus();
+      }
+    } catch (e) {
+      setSaveErr(e instanceof Error ? e.message : "Could not enable passkey");
+    } finally {
+      clearPasskeyWaiting(setAwaitingPasskey, setPasskeyBusy);
     }
   };
 
@@ -226,17 +282,53 @@ function AccountDetails() {
         <Button
           className="w-full"
           variant="outline"
-          onClick={handleSaveNamed}
-          disabled={saving || !saveName.trim()}
+          onClick={() => void handleSaveNamed()}
+          disabled={saving || passkeyBusy || !saveName.trim()}
         >
-          {saving ? "Saving…" : "Save named wallet"}
+          {saving ? "Saving…" : "Save named wallet (password)"}
         </Button>
+        {passkeysSupported && (
+          <Button
+            className="w-full"
+            variant="outline"
+            onClick={() => void handleEnablePasskey()}
+            disabled={passkeyBusy || saving || !saveName.trim()}
+          >
+            {awaitingPasskey
+              ? "Waiting for passkey…"
+              : hasPasskey
+                ? "Re-register passkey"
+                : "Enable passkey unlock"}
+          </Button>
+        )}
+        {hasPasskey && (
+          <p className="text-emerald-400/80 text-xs">
+            Passkey unlock is active for this name — use Unlock with passkey on
+            login.
+          </p>
+        )}
         <Button className="w-full" variant="outline" onClick={handleDownloadFile}>
           Download warthog_wallet.txt
         </Button>
         {saveMsg && <p className="text-emerald-400 text-xs">{saveMsg}</p>}
         {saveErr && <p className="text-red-400 text-xs">{saveErr}</p>}
       </div>
+
+      {awaitingPasskey && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-6"
+          role="status"
+          aria-live="polite"
+        >
+          <div className="rounded-xl border border-primary/40 bg-[#1a1a1a] px-6 py-5 max-w-sm text-center">
+            <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+            <p className="text-white font-medium">Waiting for passkey…</p>
+            <p className="text-white/50 text-xs mt-1">
+              Use your password manager or this device when prompted.
+            </p>
+          </div>
+        </div>
+      )}
 
       <div className="w-full mt-4 px-3 pb-4">
         <Button className="w-full" onClick={() => navigate("/private-key")}>

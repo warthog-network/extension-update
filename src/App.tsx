@@ -11,6 +11,7 @@ import RecoveryPhase from "./pages/RecoveryPhase";
 import ValidateIntro from "./pages/validateIntro";
 import Validate from "./pages/validate";
 import SetPassword from "./pages/SetPassword";
+import SecureSetup from "./pages/SecureSetup";
 import Home from "./pages/Home";
 import ActivityDetailPage from "./pages/ActivityDetailPage";
 import LockScreen from "./pages/LockScreen";
@@ -117,6 +118,7 @@ const App: React.FC = () => {
         }
       />
       <Route path="/set-password" element={<SetPassword />} />
+      <Route path="/secure-setup" element={<SecureSetup />} />
     </Routes>
   );
 

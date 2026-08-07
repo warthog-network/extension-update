@@ -89,15 +89,21 @@ function formatAmountFromRaw(raw: bigint | number | string, precision = 8): stri
   return `${whole}.${frac.toString().padStart(precision, "0")}`;
 }
 
+/** Mainnet returns flat pin fields; DeFi may nest under chainHead */
 function normalizeChainPin(data: Record<string, unknown>): {
   pinHash: string;
   pinHeight: number;
 } {
-  const head = (data?.chainHead as Record<string, unknown>) ?? data ?? {};
-  const pinHash = String(head.pinHash || "");
-  const pinHeight = Number(head.pinHeight ?? head.height);
-  if (!pinHash || !Number.isFinite(pinHeight)) {
-    throw new Error("Chain head response missing pinHash or pinHeight");
+  const nested =
+    data.chainHead && typeof data.chainHead === "object"
+      ? (data.chainHead as Record<string, unknown>)
+      : null;
+  const pinHash = String(nested?.pinHash ?? data.pinHash ?? "");
+  const pinHeight = Number(
+    nested?.pinHeight ?? nested?.height ?? data.pinHeight ?? data.height,
+  );
+  if (!pinHash || pinHash.length < 64 || !Number.isFinite(pinHeight)) {
+    throw new Error("Invalid chain head: missing pinHash/pinHeight");
   }
   return { pinHash, pinHeight };
 }
