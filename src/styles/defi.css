@@ -301,6 +301,21 @@
   font-size: 0.85rem;
   flex-shrink: 0;
   color: #fff;
+  overflow: hidden;
+}
+.defi-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.defi-avatar-sm {
+  width: 28px;
+  height: 28px;
+  font-size: 0.75rem;
+  border-radius: 8px;
+}
+.defi-asset-chart {
+  margin-top: 0.5rem;
 }
 .defi-avatar-blue {
   background: #2563eb;

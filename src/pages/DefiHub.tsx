@@ -54,6 +54,8 @@ import {
 } from "../utils/numberDisplay";
 import TransactionHistoryPanel from "../components/TransactionHistoryPanel";
 import SwapDexPanel from "../components/SwapDexPanel";
+import AssetMark, { AssetTitle } from "../components/AssetMark";
+import AssetChartPanel from "../components/AssetChartPanel";
 import {
   isWebAuthnAvailable,
   inspectWalletBlob,
@@ -863,11 +865,11 @@ function DefiHub() {
                             </span>
                           </button>
                         )}
-                        <div className="defi-avatar defi-avatar-blue">
-                          {asset.name?.[0]?.toUpperCase() || "?"}
-                        </div>
+                        <AssetMark hash={asset.hash} name={asset.name} />
                         <div className="ml-2 min-w-0">
-                          <div className="defi-card-title">{asset.name}</div>
+                          <div className="defi-card-title">
+                            <AssetTitle hash={asset.hash} name={asset.name} />
+                          </div>
                           <button
                             type="button"
                             className="defi-card-sub text-left"
@@ -928,6 +930,11 @@ function DefiHub() {
                         ×
                       </button>
                     </div>
+                    <AssetChartPanel
+                      nodeUrl={nodeUrl}
+                      hash={asset.hash}
+                      assetName={asset.name}
+                    />
                   </div>
                 ))
               )}
@@ -1687,13 +1694,22 @@ function DefiHub() {
                   const tracked = hash ? isTracked(hash) : false;
                   return (
                     <div key={hash || i} className="defi-card mt-2">
-                      <div className="defi-card-title">
-                        {asset.name || "Asset"}
-                        {tracked && (
-                          <span className="defi-badge defi-badge-blue ml-2">
-                            Tracked
-                          </span>
-                        )}
+                      <div className="defi-row" style={{ marginBottom: 6 }}>
+                        {hash ? (
+                          <AssetMark hash={hash} name={asset.name || "Asset"} />
+                        ) : null}
+                        <div className="defi-card-title min-w-0">
+                          {hash ? (
+                            <AssetTitle hash={hash} name={asset.name || "Asset"} />
+                          ) : (
+                            asset.name || "Asset"
+                          )}
+                          {tracked && (
+                            <span className="defi-badge defi-badge-blue ml-2">
+                              Tracked
+                            </span>
+                          )}
+                        </div>
                       </div>
                       <div className="defi-card-sub">
                         ID {asset.id ?? "—"} · {asset.decimals ?? "?"} decimals
