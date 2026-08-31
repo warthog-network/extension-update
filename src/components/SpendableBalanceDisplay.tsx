@@ -126,7 +126,8 @@ const SpendableBalanceDisplay: React.FC<Props> = ({
         {showLocked ? (
           <div className="main-balance-meta">
             <span>
-              Total <span className="main-balance-meta-total">{fmt(totalVal)}</span>
+              Total{" "}
+              <span className="main-balance-meta-total">{fmt(totalVal)}</span>
             </span>
             <span className="main-balance-meta-locked">
               Locked{" "}
@@ -150,25 +151,38 @@ const SpendableBalanceDisplay: React.FC<Props> = ({
   }
 
   if (layout === "row") {
+    const alignEnd = !/\btext-left\b/.test(className);
     return (
-      <div className={`text-right font-mono text-sm tabular-nums ${className}`.trim()}>
-        <div className="flex items-baseline justify-end gap-1">
+      <div
+        className={`${alignEnd ? "text-right" : "text-left"} font-mono text-sm tabular-nums min-w-0 max-w-full ${className}`.trim()}
+      >
+        <div
+          className={`flex items-baseline gap-1 min-w-0 ${
+            alignEnd ? "justify-end" : "justify-start"
+          }`}
+        >
           <span
-            className={`text-white ${primaryClassName}`.trim()}
+            className={`text-white break-all ${primaryClassName}`.trim()}
             style={primaryColor ? { color: primaryColor } : undefined}
           >
             {fmt(free)}
           </span>
           {unit ? (
-            <span className={`text-[10px] text-zinc-400 font-sans ${unitClassName}`.trim()}>
+            <span
+              className={`text-[10px] text-zinc-400 font-sans shrink-0 ${unitClassName}`.trim()}
+            >
               {unit}
             </span>
           ) : null}
         </div>
         {showLocked ? (
-          <div className="mt-0.5 flex flex-wrap justify-end gap-x-2 gap-y-0.5 text-[10px] text-zinc-500 font-sans">
+          <div
+            className={`mt-0.5 flex flex-col gap-0.5 text-[10px] text-zinc-500 font-sans leading-tight ${
+              alignEnd ? "items-end" : "items-start"
+            }`}
+          >
             <span>
-              Total <span className="text-zinc-400">{fmt(totalVal)}</span>
+              Total <span className="text-zinc-400 break-all">{fmt(totalVal)}</span>
             </span>
             <span className="text-amber-400/90">
               Locked <span className="text-amber-300">{fmt(locked)}</span>
@@ -224,14 +238,16 @@ const SpendableBalanceDisplay: React.FC<Props> = ({
         </span>
       </div>
       {showLocked ? (
-        <div className="flex items-center justify-between gap-2 text-[11px] text-zinc-500">
+        <div className="flex flex-col items-end gap-0.5 text-[11px] text-zinc-500">
+          <span>
+            Total{" "}
+            <span className="text-zinc-400 font-mono break-all">
+              {fmt(totalVal)}
+            </span>
+          </span>
           <span>
             Locked{" "}
             <span className="text-amber-300 font-mono">{fmt(locked)}</span>
-          </span>
-          <span>
-            Total{" "}
-            <span className="text-zinc-400 font-mono">{fmt(totalVal)}</span>
           </span>
         </div>
       ) : null}

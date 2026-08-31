@@ -1,11 +1,11 @@
 /**
  * DeFi hub — closer match to mobile-wallet overview + send asset / DEX.
- * Nav: Overview · Send Asset · Assets · DEX · Tools
+ * Nav: Overview · History · Send Asset · Assets · Tools
+ * DEX swap card lives on Overview (under the tab bar, above Your Assets).
  */
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Header from "../components/Header";
-import AssetPriceChart from "../components/AssetPriceChart";
 import useWallet from "../hooks/useWallet";
 import { isDefiNode } from "../utils/nodes";
 import { DEFAULT_TX_FEE } from "../config/network";
@@ -19,11 +19,9 @@ import {
 import SpendableBalanceDisplay from "../components/SpendableBalanceDisplay";
 import {
   cancelOrderTx,
-  computePoolSpotPrice,
   createAssetTx,
   fetchAssetBalance,
   fetchLiquidityPositions,
-  getDexMarket,
   getOpenOrders,
   getSmartNonce,
   isValidAssetHash,
@@ -37,14 +35,6 @@ import {
   type OpenLimitOrder,
   type OpenOrdersByAsset,
 } from "../utils/defiClient";
-import {
-  CHART_INTERVALS,
-  loadAssetPriceChart,
-  type CandlePoint,
-  type ChartInterval,
-  type ChartMode,
-  type TradePoint,
-} from "../utils/assetChart";
 import {
   BRAND_COLOR_OPTIONS,
   DEFAULT_NUMBER_DISPLAY_PREFS,
@@ -78,7 +68,22 @@ type MainTab =
   | "assets"
   | "dex"
   | "tools";
-type AssetsSub = "create" | "search";
+type AssetsSub = "search" | "create";
+type ToolsSub = "passkey" | "display" | "node";
+
+const TOOL_OPTIONS: { id: ToolsSub; label: string; subtitle: string }[] = [
+  {
+    id: "passkey",
+    label: "Passkey & 2FA",
+    subtitle: "Unlock with passkey or password + passkey",
+  },
+  {
+    id: "display",
+    label: "Number Display",
+    subtitle: "Balances, orders, and colors",
+  },
+  { id: "node", label: "Node", subtitle: "Network and nonce" },
+];
 
 const WATCHED_KEY = (addr: string) =>
   `warthogWatchedAssets_${addr.toLowerCase()}`;
@@ -184,10 +189,12 @@ function DefiHub() {
   const [sendLocked, setSendLocked] = useState("");
   const [sendTo, setSendTo] = useState("");
   const [sendAmount, setSendAmount] = useState("");
-  const [sendIsLp, setSendIsLp] = useState(false);
+
 
   // Assets create/search
-  const [assetsSub, setAssetsSub] = useState<AssetsSub>("create");
+  const [assetsSub, setAssetsSub] = useState<AssetsSub>("search");
+  const [toolsSub, setToolsSub] = useState<ToolsSub>("passkey");
+  const [showToolsMenu, setShowToolsMenu] = useState(false);
   const [createName, setCreateName] = useState("");
   const [createSupply, setCreateSupply] = useState("");
   const [createDecimals, setCreateDecimals] = useState("8");
@@ -205,18 +212,6 @@ function DefiHub() {
   const [dexInitialMode, setDexInitialMode] = useState<
     "market" | "limit" | "pool"
   >("market");
-  const [marketData, setMarketData] = useState<Record<string, unknown> | null>(
-    null,
-  );
-  const [chartPoints, setChartPoints] = useState<
-    CandlePoint[] | TradePoint[]
-  >([]);
-  const [chartInterval, setChartInterval] = useState<ChartInterval>("1h");
-  const [chartMode, setChartMode] = useState<ChartMode>("candles");
-  const [chartLoading, setChartLoading] = useState(false);
-  const [chartError, setChartError] = useState<string | null>(null);
-  const [chartNote, setChartNote] = useState<string | null>(null);
-  const [chartPoolSpot, setChartPoolSpot] = useState<number | null>(null);
 
   // Number display (Tools)
   const [numPrefs, setNumPrefs] = useState<NumberDisplayPrefs>(() =>
@@ -539,42 +534,6 @@ function DefiHub() {
     setStatus(`Tracking ${customName || abbreviate(hash)}`);
   };
 
-  const loadChart = async (
-    hash: string,
-    {
-      interval = chartInterval,
-      mode = chartMode,
-    }: { interval?: ChartInterval; mode?: ChartMode } = {},
-  ) => {
-    if (!nodeUrl || !isValidAssetHash(normalizeAssetHash(hash))) {
-      setChartPoints([]);
-      setChartError(null);
-      setChartNote(null);
-      setChartPoolSpot(null);
-      return;
-    }
-    setChartLoading(true);
-    setChartError(null);
-    setChartNote(null);
-    try {
-      const result = await loadAssetPriceChart(nodeUrl, hash, {
-        mode,
-        interval,
-        n: 80,
-      });
-      setChartPoints(result.points);
-      setChartError(result.error);
-      setChartMode(result.mode);
-      setChartNote(result.note);
-      setChartPoolSpot(result.poolSpot);
-      if (result.interval === "5m" || result.interval === "1h" || result.interval === "1d") {
-        setChartInterval(result.interval);
-      }
-    } finally {
-      setChartLoading(false);
-    }
-  };
-
   const openSendAsset = (asset: DefiAssetBalance) => {
     setSendHash(asset.hash);
     setSendName(asset.name);
@@ -584,7 +543,6 @@ function DefiHub() {
     setSendLocked(asset.locked ?? "0");
     setSendAmount("");
     setSendTo("");
-    setSendIsLp(false);
     setTab("send-asset");
   };
 
@@ -599,8 +557,7 @@ function DefiHub() {
     setDexDecimals(String(decimals));
     setDexInitialMode(mode);
     setDexPrefillKey((k) => k + 1);
-    setTab("dex");
-    void loadChart(hash, { interval: chartInterval, mode: chartMode });
+    setTab("overview");
   };
 
   if (!nodeUrl || !isDefiNode(nodeUrl)) {
@@ -626,7 +583,6 @@ function DefiHub() {
     { id: "history", label: "History" },
     { id: "send-asset", label: "Send Asset" },
     { id: "assets", label: "Assets" },
-    { id: "dex", label: "DEX" },
     { id: "tools", label: "Tools" },
   ];
 
@@ -767,8 +723,39 @@ function DefiHub() {
         </section>
       )}
 
-      {tab === "overview" && (
+      {(tab === "overview" || tab === "dex") && (
         <>
+          <SwapDexPanel
+            key={`dex-${dexPrefillKey}-${dexHash || "none"}`}
+            nodeUrl={nodeUrl}
+            wallet={wallet || ""}
+            getPk={getPk}
+            fee={fee}
+            onFeeChange={setFee}
+            wartAvailable={wartAvailable}
+            wartLocked={wartLocked}
+            wartBalance={wartBalance}
+            assetBalances={assetBalances}
+            prefillHash={dexHash || undefined}
+            prefillName={dexName || undefined}
+            prefillDecimals={parseInt(dexDecimals, 10) || 8}
+            busy={busy}
+            setBusy={setBusy}
+            setStatus={setStatus}
+            setError={setError}
+            onSuccess={async () => {
+              await refreshBalance();
+              await refreshAssets();
+              await refreshOrders();
+            }}
+            onAssetChange={(hash, name, decimals) => {
+              setDexHash(hash);
+              setDexName(name);
+              setDexDecimals(String(decimals));
+            }}
+            initialMode={dexInitialMode}
+          />
+
           {/* Your Assets — collapsible bar (wartbunker / mobile overview) */}
           <section className="defi-section">
             <button
@@ -893,7 +880,7 @@ function DefiHub() {
                           </button>
                         </div>
                       </div>
-                      <div className="text-right shrink-0">
+                      <div className="defi-asset-amounts">
                         <SpendableBalanceDisplay
                           layout="row"
                           available={asset.available ?? asset.balance}
@@ -1385,45 +1372,43 @@ function DefiHub() {
             </span>
           </div>
           <div className="defi-section-body">
-            <p className="defi-hint text-left mb-2 mt-0">
-              Transfer tokens or LP shares on the DeFi testnet.
-              {sendName ? ` Transferring ${sendName}.` : ""}
-            </p>
-
-            {assetBalances.length > 0 && (
-              <>
-                <label className="defi-label">Quick pick</label>
-                <div className="defi-subtabs mb-2">
-                  {assetBalances.map((a) => (
-                    <button
-                      key={a.hash}
-                      type="button"
-                      className={`defi-compact-btn ${sendHash.toLowerCase() === a.hash.toLowerCase() ? "defi-compact-btn-active" : ""}`}
-                      onClick={() => openSendAsset(a)}
-                    >
-                      {a.name}
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
-
-            {sendName && (
-              <p className="defi-label">Asset: {sendName}</p>
-            )}
-            <label className="defi-label">Asset hash (64 hex)</label>
-            <input
+            <label className="defi-label">Asset</label>
+            <select
               className="defi-input"
               value={sendHash}
-              onChange={(e) => setSendHash(e.target.value)}
-              placeholder="64-char hash"
-            />
-            <label className="defi-label">Recipient address</label>
+              onChange={(e) => {
+                const hash = e.target.value;
+                const match = assetBalances.find(
+                  (a) => a.hash.toLowerCase() === hash.toLowerCase(),
+                );
+                if (match) openSendAsset(match);
+                else setSendHash(hash);
+              }}
+            >
+              <option value="">Select token</option>
+              {sendHash &&
+                !assetBalances.some(
+                  (a) => a.hash.toLowerCase() === sendHash.toLowerCase(),
+                ) && (
+                  <option value={sendHash}>{sendName || "Selected asset"}</option>
+                )}
+              {assetBalances.map((a) => (
+                <option key={a.hash} value={a.hash}>
+                  {a.name}
+                </option>
+              ))}
+            </select>
+            {assetBalances.length === 0 && (
+              <p className="defi-hint text-left mt-0 mb-2">
+                Track a token on Overview or Search first.
+              </p>
+            )}
+            <label className="defi-label">To</label>
             <input
               className="defi-input"
               value={sendTo}
               onChange={(e) => setSendTo(e.target.value)}
-              placeholder="40 or 48 hex chars"
+              placeholder="Enter public address"
             />
             {(sendAvailable || sendBalance) && (
               <div className="mb-2">
@@ -1438,38 +1423,26 @@ function DefiHub() {
               </div>
             )}
             <label className="defi-label">Amount</label>
-            <input
-              className="defi-input"
-              value={sendAmount}
-              onChange={(e) => setSendAmount(e.target.value)}
-            />
-            {(sendAvailable || sendBalance) &&
-              (sendAvailable || sendBalance) !== "—" && (
-              <button
-                type="button"
-                className="defi-compact-btn mb-2"
-                onClick={() =>
-                  setSendAmount(sendAvailable || sendBalance)
-                }
-              >
-                Max available
-              </button>
-            )}
-            <label className="defi-label">Decimals</label>
-            <input
-              className="defi-input"
-              value={sendDecimals}
-              onChange={(e) => setSendDecimals(e.target.value)}
-            />
-            <label
-              className="defi-check-row"
-              onClick={() => setSendIsLp((v) => !v)}
-            >
-              <span
-                className={`defi-check ${sendIsLp ? "defi-check-on" : ""}`}
+            <div className="defi-row" style={{ alignItems: "center", marginBottom: 8 }}>
+              <input
+                className="defi-input mb-0"
+                value={sendAmount}
+                onChange={(e) => setSendAmount(e.target.value)}
+                placeholder="0"
               />
-              Transfer LP shares (liquidity)
-            </label>
+              {(sendAvailable || sendBalance) &&
+                (sendAvailable || sendBalance) !== "—" && (
+                <button
+                  type="button"
+                  className="defi-compact-btn shrink-0"
+                  onClick={() =>
+                    setSendAmount(sendAvailable || sendBalance)
+                  }
+                >
+                  Max
+                </button>
+              )}
+            </div>
             <label className="defi-label">Fee (WART)</label>
             <input
               className="defi-input"
@@ -1521,7 +1494,7 @@ function DefiHub() {
                       toAddress: sendTo,
                       amount: sendAmount,
                       decimals: parseInt(sendDecimals, 10) || 8,
-                      isLiquidity: sendIsLp,
+                      isLiquidity: false,
                       fee,
                     });
                     setStatus(`Sent · ${r.txHash || "submitted"}`);
@@ -1552,8 +1525,8 @@ function DefiHub() {
           <div className="defi-subtabs">
             {(
               [
-                ["create", "Create"],
                 ["search", "Search"],
+                ["create", "Create"],
               ] as const
             ).map(([id, label]) => (
               <button
@@ -1771,7 +1744,7 @@ function DefiHub() {
                               );
                             }}
                           >
-                            Chart / DEX
+                            DEX
                           </button>
                         </div>
                       )}
@@ -1789,180 +1762,65 @@ function DefiHub() {
         </>
       )}
 
-      {/* ════════ DEX — swap interface (wartbunker parity) ════════ */}
-      {tab === "dex" && (
+      {/* ════════ TOOLS — one card at a time (tx-filter style dropdown) ════════ */}
+      {tab === "tools" && (
         <>
-          <SwapDexPanel
-            key={`dex-${dexPrefillKey}-${dexHash || "none"}`}
-            nodeUrl={nodeUrl}
-            wallet={wallet || ""}
-            getPk={getPk}
-            fee={fee}
-            onFeeChange={setFee}
-            wartAvailable={wartAvailable}
-            wartLocked={wartLocked}
-            wartBalance={wartBalance}
-            assetBalances={assetBalances}
-            prefillHash={dexHash || undefined}
-            prefillName={dexName || undefined}
-            prefillDecimals={parseInt(dexDecimals, 10) || 8}
-            busy={busy}
-            setBusy={setBusy}
-            setStatus={setStatus}
-            setError={setError}
-            onSuccess={async () => {
-              await refreshBalance();
-              await refreshAssets();
-              await refreshOrders();
-            }}
-            onAssetChange={(hash, name, decimals) => {
-              setDexHash(hash);
-              setDexName(name);
-              setDexDecimals(String(decimals));
-            }}
-            initialMode={dexInitialMode}
-          />
-
-          {dexHash && (
-            <section className="defi-section mt-3">
-              <div className="defi-section-header">
-                <span className="defi-section-title defi-section-title-dex">
-                  Price chart
+          <div className="tx-filter-dropdown">
+            <button
+              type="button"
+              className="tx-filter-summary"
+              onClick={() => setShowToolsMenu((v) => !v)}
+              aria-expanded={showToolsMenu}
+              aria-controls="tools-picker-options"
+            >
+              <span className="tx-filter-summary-left">
+                <span className="tx-filter-chevron" aria-hidden="true">
+                  {showToolsMenu ? "▼" : "▶"}
                 </span>
-              </div>
-              <div className="defi-section-body">
-                <p className="defi-hint text-left mt-0">
-                  Same data path as WartBunker: node <code>/chart/*</code>, then
-                  recent matches, then pool spot.
-                </p>
-                <div className="defi-subtabs">
-                  {(
-                    [
-                      ["candles", "Candles"],
-                      ["trades", "Trades"],
-                    ] as const
-                  ).map(([id, label]) => (
+                <span className="tx-filter-summary-text">
+                  <span className="tx-filter-title">Tool</span>
+                  <span className="tx-filter-subtitle">
+                    {TOOL_OPTIONS.find((t) => t.id === toolsSub)?.subtitle ||
+                      "Choose a tool"}
+                  </span>
+                </span>
+              </span>
+              <span className="tx-action-btn tx-action-btn-active tx-filter-active-chip">
+                {TOOL_OPTIONS.find((t) => t.id === toolsSub)?.label || "Passkey"}
+              </span>
+            </button>
+            {showToolsMenu && (
+              <div
+                id="tools-picker-options"
+                className="tx-filter-body"
+                role="listbox"
+                aria-label="Tools"
+              >
+                <div className="tx-filter-row">
+                  {TOOL_OPTIONS.map((t) => (
                     <button
-                      key={id}
+                      key={t.id}
                       type="button"
-                      className={`defi-compact-btn ${
-                        chartMode === id ? "defi-compact-btn-active" : ""
+                      role="option"
+                      aria-selected={toolsSub === t.id}
+                      className={`tx-action-btn ${
+                        toolsSub === t.id ? "tx-action-btn-active" : ""
                       }`}
-                      disabled={chartLoading || !dexHash}
-                      onClick={() =>
-                        run(async () => {
-                          setChartMode(id);
-                          await loadChart(dexHash, {
-                            mode: id,
-                            interval: chartInterval,
-                          });
-                        })
-                      }
+                      onClick={() => {
+                        setToolsSub(t.id);
+                        setShowToolsMenu(false);
+                      }}
                     >
-                      {label}
+                      {t.label}
                     </button>
                   ))}
                 </div>
-                {chartMode === "candles" && (
-                  <div className="defi-subtabs">
-                    {CHART_INTERVALS.map((iv) => (
-                      <button
-                        key={iv.id}
-                        type="button"
-                        className={`defi-compact-btn ${
-                          chartInterval === iv.id
-                            ? "defi-compact-btn-active"
-                            : ""
-                        }`}
-                        disabled={chartLoading || !dexHash}
-                        onClick={() =>
-                          run(async () => {
-                            setChartInterval(iv.id);
-                            await loadChart(dexHash, {
-                              interval: iv.id,
-                              mode: "candles",
-                            });
-                          })
-                        }
-                      >
-                        {iv.label}
-                      </button>
-                    ))}
-                  </div>
-                )}
-                <div className="defi-subtabs">
-                  <button
-                    type="button"
-                    className="defi-compact-btn"
-                    disabled={chartLoading || !dexHash}
-                    onClick={() =>
-                      run(async () => {
-                        await loadChart(dexHash, {
-                          interval: chartInterval,
-                          mode: chartMode,
-                        });
-                      })
-                    }
-                  >
-                    {chartLoading ? "…" : "↻ Refresh"}
-                  </button>
-                  <button
-                    type="button"
-                    className="defi-btn-primary"
-                    disabled={busy || !dexHash}
-                    onClick={() =>
-                      run(async () => {
-                        if (!nodeUrl || !wallet) return;
-                        const m = (await getDexMarket(
-                          nodeUrl,
-                          dexHash,
-                        )) as Record<string, unknown>;
-                        setMarketData(m);
-                        const asset = (m.baseAsset || m.asset) as {
-                          name?: string;
-                          decimals?: number;
-                        };
-                        if (asset?.name) setDexName(String(asset.name));
-                        if (asset?.decimals != null)
-                          setDexDecimals(String(asset.decimals));
-                        await loadChart(dexHash, {
-                          interval: chartInterval,
-                          mode: chartMode,
-                        });
-                      }, "Market + chart loaded")
-                    }
-                  >
-                    Load market + chart
-                  </button>
-                </div>
-                <AssetPriceChart
-                  points={chartPoints}
-                  mode={chartMode}
-                  assetName={dexName || "Asset"}
-                  intervalLabel={
-                    chartMode === "trades"
-                      ? "Trades"
-                      : CHART_INTERVALS.find((i) => i.id === chartInterval)
-                          ?.label
-                  }
-                  loading={chartLoading}
-                  error={chartError}
-                  note={chartNote}
-                  poolSpot={
-                    chartPoolSpot ??
-                    (marketData ? computePoolSpotPrice(marketData) : null)
-                  }
-                />
               </div>
-            </section>
-          )}
-        </>
-      )}
+            )}
+          </div>
 
-      {/* ════════ TOOLS — passkey/2FA + number display (wartbunker parity) ════════ */}
-      {tab === "tools" && (
-        <>
-          {wallet && privateKey ? (
+          {toolsSub === "passkey" &&
+            (wallet && privateKey ? (
             <section
               className="defi-section"
               style={{
@@ -1983,7 +1841,8 @@ function DefiHub() {
               <div className="defi-section-body">
                 <p className="defi-hint text-left mt-0 mb-2">
                   Enable one-tap passkey unlock, or require password + passkey
-                  (2FA) — same options as wartbunker Tools.
+                  (2FA). Chrome may offer Scan QR, a security key, or this
+                  device.
                 </p>
                 {!passkeysSupported ? (
                   <p className="defi-error text-left">
@@ -2077,8 +1936,9 @@ function DefiHub() {
                 </p>
               </div>
             </section>
-          )}
+          ))}
 
+          {toolsSub === "display" && (
           <section className="defi-section">
             <div className="defi-section-header">
               <div className="defi-section-header-left">
@@ -2402,7 +2262,9 @@ function DefiHub() {
               </div>
             </div>
           </section>
+          )}
 
+          {toolsSub === "node" && (
           <section className="defi-section">
             <div className="defi-section-header">
               <span className="defi-section-title defi-section-title-dex">
@@ -2430,6 +2292,7 @@ function DefiHub() {
               </p>
             </div>
           </section>
+          )}
         </>
       )}
     </div>

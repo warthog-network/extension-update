@@ -268,7 +268,8 @@ function LoginSaved() {
             />
             <p className="text-white font-medium">Waiting for passkey…</p>
             <p className="text-white/50 text-xs mt-1">
-              Use your password manager, Face ID, fingerprint, or security key.
+              Use your password manager, Face ID, fingerprint, security key, or
+              scan the QR code when prompted.
             </p>
           </div>
         </div>

@@ -248,6 +248,7 @@
   border-radius: 12px;
   padding: 0.7rem;
   margin-bottom: 0.45rem;
+  overflow: hidden;
 }
 .defi-card-inset {
   background: var(--defi-card);
@@ -270,15 +271,23 @@
 }
 .defi-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 0.4rem;
+  min-width: 0;
 }
 .defi-balance {
   color: var(--defi-text);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   text-align: right;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.defi-asset-amounts {
+  min-width: 0;
+  max-width: 58%;
+  flex: 1 1 auto;
 }
 .defi-avatar {
   width: 34px;
@@ -325,6 +334,18 @@
 }
 .defi-input:focus {
   border-color: var(--defi-gold);
+}
+select.defi-input {
+  appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, #a1a1aa 50%),
+    linear-gradient(135deg, #a1a1aa 50%, transparent 50%);
+  background-position:
+    calc(100% - 16px) 50%,
+    calc(100% - 11px) 50%;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  padding-right: 1.6rem;
+  cursor: pointer;
 }
 .defi-btn-gold {
   padding: 0.3rem 0.6rem;
@@ -986,12 +1007,14 @@
 }
 .main-balance-meta {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.12rem;
   margin-top: 0.4rem;
   font-size: 11px;
   color: #71717a;
   position: relative;
+  line-height: 1.35;
 }
 .main-balance-meta-total {
   color: #a1a1aa;
@@ -1321,6 +1344,9 @@
   width: 100%;
   max-width: none;
   background: transparent;
+}
+.swap-page--embedded {
+  margin-bottom: 0.65rem;
 }
 .swap-page button {
   font-family: inherit;

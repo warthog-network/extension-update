@@ -8,7 +8,7 @@ import useWallet from "../hooks/useWallet";
 type MenuPos = { top: number; right: number };
 
 const ProfileHeader: React.FC = () => {
-  const { selectedWalletIndex, accountPath } = useWallet();
+  const { selectedWalletIndex } = useWallet();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [menuPos, setMenuPos] = useState<MenuPos | null>(null);
   const { name, clearToken } = useWallet();
@@ -133,23 +133,20 @@ const ProfileHeader: React.FC = () => {
     <div className="flex justify-between w-full relative z-30">
       <div className="flex items-center gap-3 min-w-0">
         <Jazzicon diameter={60} seed={selectedWalletIndex} />
-        <div className="grid gap-1 min-w-0">
+        <div className="grid min-w-0">
           <h1 className="text-white text-xl font-semibold truncate">{name}</h1>
-          <p className="text-white/30 text-xs font-normal">
-            {accountPath(selectedWalletIndex)}
-          </p>
         </div>
       </div>
-      <div className="relative shrink-0">
+      <div className="relative shrink-0 self-start">
         <div
           ref={buttonRef}
           onClick={toggleMenu}
-          className="w-[70px] h-[70px] bg-white/5 rounded-full border border-primary flex justify-center items-center cursor-pointer"
+          className="w-9 h-9 bg-white/5 rounded-full border border-primary flex justify-center items-center cursor-pointer"
           aria-haspopup="menu"
           aria-expanded={isMenuOpen}
         >
           <IoSettingsOutline
-            className={`text-white text-3xl transition-transform duration-300 ${
+            className={`text-white text-lg transition-transform duration-300 ${
               isMenuOpen ? "rotate-90" : "rotate-0"
             }`}
           />

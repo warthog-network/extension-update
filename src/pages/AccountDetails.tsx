@@ -357,7 +357,8 @@ function AccountDetails() {
             <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
             <p className="text-white font-medium">Waiting for passkey…</p>
             <p className="text-white/50 text-xs mt-1">
-              Use your password manager or this device when prompted.
+              Use your password manager, Face ID, fingerprint, security key, or
+              scan the QR code when prompted.
             </p>
           </div>
         </div>
