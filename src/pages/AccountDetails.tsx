@@ -58,7 +58,6 @@ function AccountDetails() {
     saveCurrentAsNamedWallet,
     enablePasskeyOnCurrentWallet,
     seedPhrase,
-    getAccountFromIndex,
   } = useWallet();
   const [copyLabel, setCopyLabel] = useState("Copy");
   const [isEditing, setIsEditing] = useState(false);
@@ -151,16 +150,17 @@ function AccountDetails() {
     }
   };
 
-  const handleDownloadFile = () => {
+  const handleDownloadFile = async () => {
     if (!password || !wallet) return;
     try {
-      const account = getAccountFromIndex(selectedWalletIndex);
-      const encrypted = encryptWallet(
+      const { exportWalletFromWorker } = await import("../utils/signingBridge");
+      const exported = await exportWalletFromWorker();
+      const encrypted = await encryptWallet(
         {
-          privateKey: account.getPrivateKeyHex(),
-          publicKey: account.getPublicKeyHex(),
-          address: account.getAddress(),
-          mnemonic: seedPhrase || undefined,
+          privateKey: exported.privateKey,
+          publicKey: exported.publicKey || "",
+          address: exported.address || wallet,
+          mnemonic: exported.mnemonic || seedPhrase || undefined,
         },
         password,
       );

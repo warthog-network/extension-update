@@ -740,7 +740,7 @@ export async function unlockEnvelopeWith2fa(envelope, password, decryptPasswordF
 
   let fromPassword;
   try {
-    fromPassword = decryptPasswordFn(envelope.password, password);
+    fromPassword = await decryptPasswordFn(envelope.password, password);
   } catch {
     throw new Error('Invalid password');
   }

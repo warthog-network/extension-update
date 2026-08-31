@@ -87,6 +87,7 @@ const App: React.FC = () => {
       <Route path="/defi" element={<DefiHub />} />
       <Route path="/account-details" element={<AccountDetails />} />
       <Route path="/private-key" element={<ShowPrivateKey />} />
+      <Route path="/secure-setup" element={<SecureSetup />} />
     </Routes>
   );
 

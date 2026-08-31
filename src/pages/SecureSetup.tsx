@@ -24,15 +24,12 @@ function SecureSetup() {
   const state = (location.state || {}) as LocationState;
   const {
     seedPhrase,
-    privateKey,
     wallet,
-    getAccountFromIndex,
-    selectedWalletIndex,
+    signingUnlocked,
     setPassword,
     setToken,
     setName,
     saveCurrentAsNamedWallet,
-    activateKeyMaterial,
   } = useWallet();
 
   const origin: Origin = state.origin === "restore" ? "restore" : "create";
@@ -48,6 +45,7 @@ function SecureSetup() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [awaitingPasskey, setAwaitingPasskey] = useState(false);
+  const [backupPrivateKey, setBackupPrivateKey] = useState<string | null>(null);
 
   useEffect(() => {
     const ok = isWebAuthnAvailable();
@@ -56,10 +54,26 @@ function SecureSetup() {
   }, []);
 
   useEffect(() => {
-    if (!wallet && !privateKey) {
+    if (!wallet && !signingUnlocked) {
       navigate("/", { replace: true });
     }
-  }, [wallet, privateKey, navigate]);
+  }, [wallet, signingUnlocked, navigate]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void import("../utils/signingBridge").then(({ exportWalletFromWorker }) =>
+      exportWalletFromWorker()
+        .then((exported) => {
+          if (!cancelled) setBackupPrivateKey(exported.privateKey || null);
+        })
+        .catch(() => {
+          if (!cancelled) setBackupPrivateKey(null);
+        }),
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const passwordsMatch = !confirmPassword || password === confirmPassword;
 
@@ -160,18 +174,6 @@ function SecureSetup() {
     try {
       setToken("session-" + Date.now().toString());
       if (walletName.trim()) setName(walletName.trim());
-      // ensure session is activated
-      if (privateKey && wallet) {
-        await activateKeyMaterial(
-          {
-            privateKey,
-            publicKey: getAccountFromIndex(selectedWalletIndex).getPublicKeyHex(),
-            address: wallet,
-            mnemonic: seedPhrase || undefined,
-          },
-          { name: walletName.trim() || "Session" },
-        );
-      }
       navigate("/home", { replace: true });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to open wallet");
@@ -180,19 +182,20 @@ function SecureSetup() {
     }
   };
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
     if (!downloadPassword || !wallet) {
       setError("Enter a password to encrypt the file");
       return;
     }
     try {
-      const account = getAccountFromIndex(selectedWalletIndex);
-      const encrypted = encryptWallet(
+      const { exportWalletFromWorker } = await import("../utils/signingBridge");
+      const exported = await exportWalletFromWorker();
+      const encrypted = await encryptWallet(
         {
-          privateKey: account.getPrivateKeyHex(),
-          publicKey: account.getPublicKeyHex(),
-          address: account.getAddress(),
-          mnemonic: seedPhrase || undefined,
+          privateKey: exported.privateKey,
+          publicKey: exported.publicKey || "",
+          address: exported.address || wallet,
+          mnemonic: exported.mnemonic || seedPhrase || undefined,
         },
         downloadPassword,
       );
@@ -387,11 +390,11 @@ function SecureSetup() {
               </p>
             </div>
           )}
-          {privateKey && (
+          {backupPrivateKey && (
             <div className="rounded-lg bg-white/5 border border-white/10 p-3">
               <p className="text-red-400 text-xs font-medium mb-1">PRIVATE KEY</p>
               <p className="text-white text-xs font-mono break-all select-text">
-                {privateKey}
+                {backupPrivateKey}
               </p>
             </div>
           )}

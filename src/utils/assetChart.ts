@@ -7,6 +7,7 @@
  *  3. If still empty but pool has reserves → single pool-spot point
  */
 import { normalizeNodeUrl } from "./nodes";
+import { ensureHostPermission, hostPermissionError } from "./hostAccess";
 import {
   computePoolSpotPrice,
   isValidAssetHash,
@@ -76,6 +77,9 @@ async function fetchNodePath(
 ): Promise<NodeJson> {
   const base = normalizeNodeUrl(nodeBase);
   if (!base) throw new Error("Invalid node URL");
+  if (!(await ensureHostPermission(base))) {
+    throw new Error(hostPermissionError(base));
+  }
   const url = `${base}/${path.replace(/^\//, "")}`;
   const res = await fetch(url, {
     method: "GET",

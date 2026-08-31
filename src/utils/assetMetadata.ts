@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { ensureHostPermission } from "./hostAccess";
 
 /** Off-chain catalog (same VPS as WartBunker). */
 export const METADATA_BASE = "https://warthog-defitestnet.duckdns.org:4445";
@@ -41,6 +42,7 @@ function infoUrl(hash: string): string {
 }
 
 async function fetchJson(url: string): Promise<unknown | null> {
+  if (!(await ensureHostPermission(url))) return null;
   const res = await fetch(url, { headers: { Accept: "application/json" } });
   if (!res.ok) return null;
   const type = res.headers.get("content-type") || "";

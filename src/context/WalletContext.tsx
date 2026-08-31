@@ -2,6 +2,7 @@ import React, {
   createContext,
   useState,
   useEffect,
+  useRef,
   ReactNode,
   useCallback,
 } from "react";
@@ -41,6 +42,13 @@ import {
   tryParseEnvelope,
   unlockEnvelopeWith2fa,
 } from "../utils/passkeyWallet";
+import {
+  bumpIdleTimer,
+  exportWalletFromWorker,
+  lockSigningWorker,
+  setIdleLockHandler,
+  unlockSigningWorker,
+} from "../utils/signingBridge";
 
 setPasskeyProductName("Warthog Extension");
 
@@ -89,9 +97,14 @@ interface WalletContextProps {
   lockSession: () => Promise<void>;
   accountPath: (index: number) => string;
   newWallet: (wordCount?: WordCount, pathType?: PathType) => Promise<void>;
-  addAccount: (name: string | null) => void;
-  importWallet: (seedPhrase: string, pathType?: PathType, wordCount?: WordCount) => void;
-  importPrivateKey: (privateKeyHex: string) => void;
+  addAccount: (name: string | null) => Promise<void>;
+  switchActiveAccount: (index: number) => Promise<void>;
+  importWallet: (
+    seedPhrase: string,
+    pathType?: PathType,
+    wordCount?: WordCount,
+  ) => Promise<void>;
+  importPrivateKey: (privateKeyHex: string) => Promise<void>;
   /** Activate from website-compatible encrypted payload (saved wallet / file). */
   loginFromEncrypted: (
     encrypted: string,
@@ -134,6 +147,7 @@ interface WalletContextProps {
   setVisibleWalletListState: (visibleWalletList: boolean[]) => void;
   setTmpDestinationWalletState: (tmpDestinationWallet: string) => void;
   getAccountFromIndex: (index: number) => Account;
+  signingUnlocked: boolean;
 }
 
 const defaultNodeList = [...DEFAULT_NODE_LIST];
@@ -162,6 +176,8 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({
   const [nodeList, setNodeListState] = useState<string[]>([]);
   const [nodeNameList, setNodeNameListState] = useState<string[]>([]);
   const [token, setTokenState] = useState<string | null>(null);
+  const [signingUnlocked, setSigningUnlocked] = useState(false);
+  const [hasMnemonic, setHasMnemonic] = useState(false);
   const [visibleWalletList, setVisibleWalletListState] = useState<boolean[]>(
     [],
   );
@@ -323,16 +339,19 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({
     const accountName = opts?.name || "Account 0";
     const sessionToken = opts?.password
       ? opts.password + Date.now().toString()
-      : null;
+      : "session-" + Date.now().toString();
     const expirationTime = Date.now() + 3600 * 1000;
 
-    // React state for current document
-    if (data.mnemonic) {
-      setSeedPhraseState(data.mnemonic);
-    } else {
-      setSeedPhraseState(null);
-    }
-    setPrivateKeyState(data.privateKey);
+    await unlockSigningWorker({
+      privateKey: data.privateKey,
+      publicKey: data.publicKey,
+      address: data.address,
+      mnemonic: data.mnemonic,
+    });
+    setPrivateKeyState(null);
+    setSeedPhraseState(null);
+    setSigningUnlocked(true);
+    setHasMnemonic(Boolean(data.mnemonic));
     setWalletState(data.address);
     setWalletListState([data.address]);
     setNameListState([accountName]);
@@ -380,9 +399,17 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({
   ): Promise<void> => {
     try {
       const data = await generateWallet(wordCount, pt);
-      // Keep seed in state for recovery phrase screens before password is set
+      await unlockSigningWorker({
+        privateKey: data.privateKey,
+        publicKey: data.publicKey,
+        address: data.address,
+        mnemonic: data.mnemonic,
+      });
+      setSigningUnlocked(true);
+      setHasMnemonic(Boolean(data.mnemonic));
+      // Seed stays in React only while the recovery screens are showing it.
       setSeedPhrase(data.mnemonic || null);
-      setPrivateKey(data.privateKey);
+      setPrivateKey(null);
       setWallet(data.address);
       setWalletList([data.address]);
       setNameList(["Account 0"]);
@@ -397,15 +424,35 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({
     }
   };
 
+  const mnemonicFromSession = async (): Promise<string | null> => {
+    try {
+      const exported = await exportWalletFromWorker();
+      const mnemonic = exported.mnemonic || seedPhrase || null;
+      exported.privateKey = "";
+      return mnemonic;
+    } catch {
+      return seedPhrase;
+    }
+  };
+
   const addAccount = async (accountName: string | null): Promise<void> => {
     try {
-      if (!seedPhrase) {
+      const mnemonic = await mnemonicFromSession();
+      if (!mnemonic) {
         throw new Error("Cannot add accounts to a private-key-only wallet");
       }
       const index = walletList.length;
-      const data = deriveAccountAtIndex(seedPhrase, pathType, index);
+      const data = deriveAccountAtIndex(mnemonic, pathType, index);
+      await unlockSigningWorker({
+        privateKey: data.privateKey,
+        publicKey: data.publicKey,
+        address: data.address,
+        mnemonic,
+      });
+      setPrivateKeyState(null);
+      setSigningUnlocked(true);
+      setHasMnemonic(true);
       setWallet(data.address);
-      setPrivateKey(data.privateKey);
       setWalletList([...walletList, data.address]);
       setNameList([...nameList, accountName || `Account ${index}`]);
       setVisibleWalletList([...visibleWalletList, true]);
@@ -417,17 +464,45 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({
     }
   };
 
-  const importWallet = (
+  const switchActiveAccount = async (index: number): Promise<void> => {
+    const mnemonic = await mnemonicFromSession();
+    if (!mnemonic) {
+      throw new Error("Cannot switch accounts on a private-key-only wallet");
+    }
+    const data = deriveAccountAtIndex(mnemonic, pathType, index);
+    await unlockSigningWorker({
+      privateKey: data.privateKey,
+      publicKey: data.publicKey,
+      address: data.address,
+      mnemonic,
+    });
+    setPrivateKeyState(null);
+    setSigningUnlocked(true);
+    setHasMnemonic(true);
+    setWallet(data.address);
+    setSelectedWalletIndex(index);
+    setName(nameList[index] || `Account ${index}`);
+  };
+
+  const importWallet = async (
     mnemonic: string,
     pt: PathType = "hardened",
     wordCount?: WordCount,
-  ): void => {
+  ): Promise<void> => {
     const words = mnemonic.trim().split(/\s+/).filter(Boolean);
     const wc = (wordCount ||
       (words.length === 24 ? 24 : 12)) as WordCount;
     const data = deriveWallet(words.join(" "), wc, pt, 0);
+    await unlockSigningWorker({
+      privateKey: data.privateKey,
+      publicKey: data.publicKey,
+      address: data.address,
+      mnemonic: data.mnemonic,
+    });
+    setSigningUnlocked(true);
+    setHasMnemonic(true);
     setSeedPhrase(data.mnemonic || null);
-    setPrivateKey(data.privateKey);
+    setPrivateKey(null);
     setWallet(data.address);
     setWalletList([data.address]);
     setNameList(["Account 0"]);
@@ -438,10 +513,17 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({
     ensureDefaultNodes();
   };
 
-  const importPrivateKey = (privateKeyHex: string): void => {
+  const importPrivateKey = async (privateKeyHex: string): Promise<void> => {
     const data = importFromPrivateKey(privateKeyHex);
+    await unlockSigningWorker({
+      privateKey: data.privateKey,
+      publicKey: data.publicKey,
+      address: data.address,
+    });
+    setSigningUnlocked(true);
+    setHasMnemonic(false);
     setSeedPhrase(null);
-    setPrivateKey(data.privateKey);
+    setPrivateKey(null);
     setWallet(data.address);
     setWalletList([data.address]);
     setNameList(["Account 0"]);
@@ -451,16 +533,16 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({
     ensureDefaultNodes();
   };
 
-  const currentWalletPayload = (): EncryptedWalletPayload => {
-    if (!privateKey || !wallet) {
+  const currentWalletPayload = async (): Promise<EncryptedWalletPayload> => {
+    const exported = await exportWalletFromWorker();
+    if (!exported?.privateKey) {
       throw new Error("No active wallet to save");
     }
-    const account = getAccountFromIndex(selectedWalletIndex);
     return {
-      privateKey: account.getPrivateKeyHex(),
-      publicKey: account.getPublicKeyHex(),
-      address: account.getAddress(),
-      mnemonic: seedPhrase || undefined,
+      privateKey: exported.privateKey,
+      publicKey: exported.publicKey || "",
+      address: exported.address || wallet || "",
+      mnemonic: exported.mnemonic || seedPhrase || undefined,
     };
   };
 
@@ -480,7 +562,7 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({
         "This wallet has no password unlock — use passkey instead",
       );
     }
-    const decrypted = decryptWallet(encrypted, pwd);
+    const decrypted = await decryptWallet(encrypted, pwd);
     const material: WalletKeyMaterial = {
       privateKey: decrypted.privateKey,
       publicKey: decrypted.publicKey,
@@ -549,7 +631,7 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({
       preferFingerprint?: boolean;
     },
   ): Promise<void> => {
-    const payload = currentWalletPayload();
+    const payload = await currentWalletPayload();
     const trimmed = walletName.trim();
     if (!trimmed) throw new Error("Wallet name is required");
 
@@ -567,7 +649,7 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({
     const existing = await loadNamedWalletEncrypted(trimmed);
     const prevEnv = existing ? tryParseEnvelope(existing) : null;
 
-    let passwordCipher: string | null = pwd ? encryptWallet(payload, pwd) : null;
+    let passwordCipher: string | null = pwd ? await encryptWallet(payload, pwd) : null;
     if (!passwordCipher && prevEnv?.password) passwordCipher = prevEnv.password;
     if (!passwordCipher && existing && !prevEnv) passwordCipher = existing;
 
@@ -590,7 +672,7 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({
         };
       };
       if (require2fa && pwd) {
-        envelope.password = encryptWallet(payload, pwd);
+        envelope.password = await encryptWallet(payload, pwd);
         envelope.require2fa = true;
       }
       await saveNamedWallet(trimmed, serializeEnvelope(envelope));
@@ -598,7 +680,7 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({
     }
 
     if (pwd) {
-      const cipher = encryptWallet(payload, pwd);
+      const cipher = await encryptWallet(payload, pwd);
       if (prevEnv?.passkey) {
         const next = envelopeWithPassword(payload, cipher, prevEnv, {
           require2fa,
@@ -616,7 +698,7 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({
     preferFingerprint?: boolean;
     name?: string | null;
   }): Promise<boolean> => {
-    if (!privateKey || !wallet) {
+    if (!signingUnlocked || !wallet) {
       throw new Error("Unlock your wallet first, then enable passkey");
     }
     const tag =
@@ -661,6 +743,13 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({
     setPasswordState(null);
     setTokenState(null);
     setInputWordsBackupState([]);
+    setSigningUnlocked(false);
+    setHasMnemonic(false);
+    try {
+      await lockSigningWorker();
+    } catch {
+      /* ignore */
+    }
     try {
       await browser.storage.local.remove([...SECRET_STORAGE_KEYS]);
     } catch (error: unknown) {
@@ -762,7 +851,6 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({
     loadFromChromeStorage("selectedWalletIndex", (idx) =>
       setSelectedWalletIndexState(idx ? parseInt(idx, 10) : 0),
     );
-    loadFromChromeStorage("password", setPasswordState);
     loadFromChromeStorage("name", setNameState);
     loadFromChromeStorage("token", setTokenState);
   }, [loadFromChromeStorage]);
@@ -779,21 +867,23 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({
     return () => clearInterval(interval);
   }, [loadFromChromeStorage]);
 
-  // Backfill privateKey from seed for older installs that only stored seedPhrase
+  const lockSessionRef = useRef(lockSession);
+  lockSessionRef.current = lockSession;
+
   useEffect(() => {
-    if (seedPhrase && wallet && !privateKey) {
-      try {
-        const data = deriveAccountAtIndex(
-          seedPhrase,
-          pathType,
-          selectedWalletIndex || 0,
-        );
-        setPrivateKey(data.privateKey);
-      } catch (e) {
-        console.warn("Could not backfill private key from seed", e);
-      }
-    }
-  }, [seedPhrase, wallet, privateKey, pathType, selectedWalletIndex]);
+    setIdleLockHandler(() => {
+      void lockSessionRef.current();
+    });
+    const bump = () => bumpIdleTimer();
+    window.addEventListener("pointerdown", bump);
+    window.addEventListener("keydown", bump);
+    bumpIdleTimer();
+    return () => {
+      setIdleLockHandler(null);
+      window.removeEventListener("pointerdown", bump);
+      window.removeEventListener("keydown", bump);
+    };
+  }, []);
 
   const selectedNodeUrl =
     nodeList.length > 0
@@ -801,8 +891,8 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({
       : null;
   const selectedNetworkLabel = networkLabel(selectedNodeUrl);
   // Password or session token (passkey-only unlock sets token without password)
-  const isAuthenticated = Boolean(wallet && (seedPhrase || privateKey));
-  const canAddAccounts = Boolean(seedPhrase);
+  const isAuthenticated = Boolean(wallet && signingUnlocked && token);
+  const canAddAccounts = hasMnemonic || Boolean(seedPhrase);
 
   return (
     <WalletContext.Provider
@@ -826,6 +916,7 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({
         selectedNodeUrl,
         selectedNetworkLabel,
         isAuthenticated,
+        signingUnlocked,
         canAddAccounts,
         accountPath,
         setSeedPhrase,
@@ -847,6 +938,7 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({
         lockSession,
         newWallet,
         addAccount,
+        switchActiveAccount,
         setWalletListState,
         setNodeListState,
         setNodeNameListState,

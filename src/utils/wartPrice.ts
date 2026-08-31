@@ -55,6 +55,10 @@ async function fetchFromCoinGecko(): Promise<number> {
   const url =
     envUrl ||
     "https://api.coingecko.com/api/v3/simple/price?ids=warthog&vs_currencies=usd";
+  const { ensureHostPermission } = await import("./hostAccess");
+  if (!(await ensureHostPermission(url))) {
+    throw new Error("Missing permission for price API");
+  }
   const res = await fetch(url, { headers: { Accept: "application/json" } });
   if (!res.ok) throw new Error(`CoinGecko HTTP ${res.status}`);
   const data = await res.json();
@@ -66,7 +70,12 @@ async function fetchFromCoinGecko(): Promise<number> {
 }
 
 async function fetchFromCoinPaprika(): Promise<number> {
-  const res = await fetch("https://api.coinpaprika.com/v1/tickers/wart-warthog", {
+  const url = "https://api.coinpaprika.com/v1/tickers/wart-warthog";
+  const { ensureHostPermission } = await import("./hostAccess");
+  if (!(await ensureHostPermission(url))) {
+    throw new Error("Missing permission for price API");
+  }
+  const res = await fetch(url, {
     headers: { Accept: "application/json" },
   });
   if (!res.ok) throw new Error(`CoinPaprika HTTP ${res.status}`);

@@ -10,6 +10,7 @@ import {
   normalizeNodeUrl,
 } from "../utils/nodes";
 import { probeNode } from "../utils/warthogNode";
+import { ensureHostPermission } from "../utils/hostAccess";
 
 interface NodeType {
   id: number;
@@ -49,7 +50,12 @@ function SelectNode() {
     );
   });
 
-  const setPrimaryNode = (id: number) => {
+  const setPrimaryNode = async (id: number) => {
+    const url = nodeList[id];
+    if (url && !(await ensureHostPermission(url))) {
+      setWarning(true);
+      return;
+    }
     setSelectedNodeIndex(id);
   };
 
@@ -62,7 +68,7 @@ function SelectNode() {
       setSelectedNodeIndex(Math.max(selectedNodeIndex - 1, 0));
   };
 
-  const handleAddNode = () => {
+  const handleAddNode = async () => {
     const urlPattern =
       /^(https?:\/\/)(([a-z0-9-]+\.)+[a-z]{2,}|(\d{1,3}\.){3}\d{1,3})(:\d{1,5})?(\/.*)?$/i;
 
@@ -73,6 +79,11 @@ function SelectNode() {
     }
 
     if (nodeList.some((n) => normalizeNodeUrl(n) === normalized)) {
+      setWarning(true);
+      return;
+    }
+
+    if (!(await ensureHostPermission(normalized))) {
       setWarning(true);
       return;
     }

@@ -10,32 +10,45 @@ function ShowPrivateKey() {
     password,
     seedPhrase,
     name,
+    signingUnlocked,
     selectedWalletIndex,
-    getAccountFromIndex,
   } = useWallet();
   const navigate = useNavigate();
   const [enteredPassword, setEnteredPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [isPrivateKeyVisible, setPrivateKeyVisible] = useState(false); // State to track visibility of private key
+  const [isPrivateKeyVisible, setPrivateKeyVisible] = useState(false);
+  const [revealedKey, setRevealedKey] = useState<string | null>(null);
 
   const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setEnteredPassword(e.target.value);
   };
 
-  const handleSubmit = () => {
-    if (enteredPassword === password) {
-      setPrivateKeyVisible(true); // Show private key if password is correct
-    } else {
+  const handleSubmit = async () => {
+    if (password && enteredPassword !== password) {
       setError("Incorrect password. Please try again.");
+      return;
+    }
+    if (!signingUnlocked) {
+      setError("Wallet is locked — unlock first.");
+      return;
+    }
+    try {
+      const { exportWalletFromWorker } = await import("../utils/signingBridge");
+      const exported = await exportWalletFromWorker();
+      setRevealedKey(exported.privateKey);
+      setPrivateKeyVisible(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not export key");
     }
   };
 
   const handleDone = () => {
-    if (enteredPassword === password) {
-      navigate("/home");
-    } else {
+    if (password && enteredPassword !== password) {
       setError("Incorrect password. Please try again.");
+      return;
     }
+    setRevealedKey(null);
+    navigate("/home");
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -60,7 +73,7 @@ function ShowPrivateKey() {
           <div className="text-xs text-white/50">Connected Wallet</div>
         </div>
       </div>
-      {!isPrivateKeyVisible && seedPhrase && (
+      {!isPrivateKeyVisible && signingUnlocked && (
         <div className="w-full max-w-sm mt-6">
           <label htmlFor="password" className="text-sm text-white font-normal">
             Enter password
@@ -79,12 +92,12 @@ function ShowPrivateKey() {
       )}
 
       {/* Show Private Key Section */}
-      {isPrivateKeyVisible && seedPhrase && (
+      {isPrivateKeyVisible && revealedKey && (
         <div className="mt-6">
           <p className="text-white text-sm">Private Key</p>
           <div className="px-3 py-3 rounded-lg border border-[#fdb913]/25 backdrop-blur-md flex items-center w-[400px]">
             <div className="text-white text-lg w-full break-words">
-              {getAccountFromIndex(selectedWalletIndex).getPrivateKeyHex()}
+              {revealedKey}
             </div>
           </div>
 
@@ -102,7 +115,7 @@ function ShowPrivateKey() {
 
       {/* Button Section */}
       <div className="mt-6 w-full gap-3 flex absolute bottom-3 px-4 left-0">
-        {!isPrivateKeyVisible && seedPhrase && (
+        {!isPrivateKeyVisible && (signingUnlocked || seedPhrase) && (
           <>
             <Button
               className="w-full"
@@ -116,7 +129,7 @@ function ShowPrivateKey() {
             </Button>
           </>
         )}
-        {isPrivateKeyVisible && seedPhrase && (
+        {isPrivateKeyVisible && revealedKey && (
           <Button className="w-full" onClick={handleDone} variant="primary">
             Done
           </Button>

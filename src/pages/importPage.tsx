@@ -29,7 +29,7 @@ function ImportPage() {
       if (words.length !== wordCount) {
         throw new Error(`Seed phrase must have exactly ${wordCount} words`);
       }
-      importWallet(words.join(" "), pathType, wordCount);
+      await importWallet(words.join(" "), pathType, wordCount);
       navigate("/set-password");
     } catch (e) {
       console.log("Failed to recover wallet:", e);

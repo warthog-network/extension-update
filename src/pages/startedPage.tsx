@@ -102,7 +102,7 @@ function StartedPage() {
     setBusy(true);
     setError(null);
     try {
-      importWallet(mnemonic.trim(), pathType, wordCount);
+      await importWallet(mnemonic.trim(), pathType, wordCount);
       navigate("/secure-setup", {
         state: { origin: "restore", walletName: walletName.trim() || "Restored" },
       });
@@ -122,7 +122,7 @@ function StartedPage() {
     setBusy(true);
     setError(null);
     try {
-      importPrivateKey(pk);
+      await importPrivateKey(pk);
       navigate("/secure-setup", {
         state: { origin: "restore", walletName: walletName.trim() || "Imported" },
       });

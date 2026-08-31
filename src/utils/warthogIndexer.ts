@@ -6,6 +6,7 @@
 
 import { DEFI_TESTNET_URL } from "../config/network";
 import { isDefiNode, normalizeNodeUrl } from "./nodes";
+import { ensureHostPermission, hostPermissionError } from "./hostAccess";
 
 /** Public DeFi testnet indexer (nginx → warthog-read-api). */
 export const DEFAULT_INDEXER_BASE = `${DEFI_TESTNET_URL.replace(/\/+$/, "")}/api/explorer`;
@@ -72,6 +73,9 @@ export function cleanIndexerAddress(address: string): string {
 export async function indexerFetch(indexerBase: string, path: string): Promise<unknown> {
   const base = String(indexerBase || "").replace(/\/+$/, "");
   const p = path.startsWith("/") ? path : `/${path}`;
+  if (!(await ensureHostPermission(base))) {
+    throw new Error(hostPermissionError(base));
+  }
   // Only CORS-safelisted headers (no Cache-Control — preflight fails on public indexer).
   const res = await fetch(`${base}${p}`, {
     method: "GET",

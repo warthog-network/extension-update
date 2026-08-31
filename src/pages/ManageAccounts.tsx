@@ -23,8 +23,7 @@ function ManageAccounts() {
     setSelectedWalletIndex,
     addAccount,
     canAddAccounts,
-    setPrivateKey,
-    getAccountFromIndex,
+    switchActiveAccount,
   } = useWallet();
 
   const [accounts, setAccounts] = useState<AccountType[]>([] as AccountType[]);
@@ -32,9 +31,9 @@ function ManageAccounts() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [newAccountName, setNewAccountName] = useState("");
 
-  const handleAddAccount = () => {
+  const handleAddAccount = async () => {
     if (!canAddAccounts) return;
-    addAccount(newAccountName.length ? newAccountName : null);
+    await addAccount(newAccountName.length ? newAccountName : null);
     setNewAccountName("");
     setIsDialogOpen(false);
   };
@@ -55,11 +54,7 @@ function ManageAccounts() {
     setName(nameList[id]);
     setWallet(walletList[id]);
     setSelectedWalletIndex(id);
-    try {
-      setPrivateKey(getAccountFromIndex(id).getPrivateKeyHex());
-    } catch {
-      // ignore
-    }
+    void switchActiveAccount(id);
   };
 
   // const removeAccount = (id: number) => {

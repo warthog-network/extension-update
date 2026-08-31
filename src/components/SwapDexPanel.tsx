@@ -63,7 +63,6 @@ function formatEstimate(n: number | null): string {
 type Props = {
   nodeUrl: string;
   wallet: string;
-  getPk: () => string;
   fee: string;
   onFeeChange: (v: string) => void;
   wartAvailable: string;
@@ -86,7 +85,6 @@ type Props = {
 export default function SwapDexPanel({
   nodeUrl,
   wallet,
-  getPk,
   fee,
   onFeeChange,
   wartAvailable,
@@ -512,7 +510,7 @@ export default function SwapDexPanel({
       }
 
       try {
-        const r = await limitSwapTx(nodeUrl, getPk(), wallet, {
+        const r = await limitSwapTx(nodeUrl, wallet, {
           assetHash,
           isBuy: payingWart,
           amount: amountStr,
@@ -565,7 +563,7 @@ export default function SwapDexPanel({
     setBusy(true);
     setError(null);
     try {
-      const r = await depositLiquidityTx(nodeUrl, getPk(), wallet, {
+      const r = await depositLiquidityTx(nodeUrl, wallet, {
         assetHash,
         assetAmount: lpAssetAmt,
         wartAmount: lpWartAmt,
@@ -596,7 +594,7 @@ export default function SwapDexPanel({
     setBusy(true);
     setError(null);
     try {
-      const r = await withdrawLiquidityTx(nodeUrl, getPk(), wallet, {
+      const r = await withdrawLiquidityTx(nodeUrl, wallet, {
         assetHash,
         shares: lpShares,
         fee,

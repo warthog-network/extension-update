@@ -54,7 +54,6 @@ function SendFinalStep() {
     setSelectedWalletIndex,
     setName,
     setWallet,
-    getAccountFromIndex,
   } = useWallet();
   const navigate = useNavigate();
 
@@ -170,10 +169,8 @@ function SendFinalStep() {
         return;
       }
 
-      const account = getAccountFromIndex(selectedWalletIndex);
       const result = await sendWartTransfer({
         nodeBase: nodeUrl,
-        privateKeyHex: account.getPrivateKeyHex(),
         toAddress: tmpDestinationWallet,
         amountWart: String(amount),
         feeWart: fee,

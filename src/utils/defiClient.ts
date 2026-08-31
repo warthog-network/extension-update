@@ -21,6 +21,8 @@ import {
 import { DEFAULT_TX_FEE } from "../config/network";
 import { normalizeNodeUrl } from "./nodes";
 import { formatBalanceBreakdown } from "./balanceBreakdown";
+import { runWithUnlockedAccount } from "./signingBridge";
+import { ensureHostPermission, hostPermissionError } from "./hostAccess";
 
 /** Matches mobile-wallet AssetBalance / OpenOrders shapes. */
 export type DefiAssetBalance = {
@@ -187,30 +189,15 @@ type BuildFn = (
 
 async function signAndSubmit(
   nodeBase: string,
-  privateKeyHex: string,
   address: string,
   buildTx: BuildFn,
   opts?: { fee?: string; nonceId?: number },
 ): Promise<{ txHash: string; nonce: number }> {
-  if (!privateKeyHex || !String(privateKeyHex).trim()) {
-    throw new Error("Wallet locked — unlock to sign transactions");
-  }
   const api = createDefiApi(nodeBase);
   const fee = await resolveFee(api, opts?.fee);
   const nonceId = opts?.nonceId ?? getSmartNonce(address);
   const nonce = NonceId.fromNumber(nonceId);
   if (!nonce) throw new Error(`Invalid nonce ${nonceId}`);
-
-  let account: Account;
-  try {
-    account = accountFromPrivateKey(privateKeyHex);
-  } catch (e) {
-    throw new Error(
-      e instanceof Error
-        ? `Invalid private key: ${e.message}`
-        : "Invalid private key",
-    );
-  }
 
   let ctx: Awaited<ReturnType<WarthogApi["createTransactionContext"]>>;
   try {
@@ -226,7 +213,9 @@ async function signAndSubmit(
     throw new Error(msg || "Failed to build transaction context (pin/fee)");
   }
 
-  const tx = serializeTx(buildTx(ctx, account));
+  const tx = serializeTx(
+    await runWithUnlockedAccount((account) => buildTx(ctx, account)),
+  );
   const submit = await api.submitTransaction(tx);
   if (!submit.success) {
     const err = submit.error || "Node rejected transaction";
@@ -393,6 +382,9 @@ export async function searchAssetsDetailed(
   }
 
   const url = `${base}/asset/complete?${params.toString()}`;
+  if (!(await ensureHostPermission(base))) {
+    throw new Error(hostPermissionError(base));
+  }
   let text: string;
   try {
     const response = await fetch(url, {
@@ -550,7 +542,6 @@ export function encodeLimitPriceHex(
 
 export async function createAssetTx(
   nodeBase: string,
-  privateKeyHex: string,
   address: string,
   params: { name: string; supply: string; decimals: number; fee?: string },
 ) {
@@ -571,7 +562,6 @@ export async function createAssetTx(
 
   return signAndSubmit(
     nodeBase,
-    privateKeyHex,
     address,
     (ctx, account) =>
       ctx.createAssets(account, totalSupply, precision, assetName),
@@ -581,7 +571,6 @@ export async function createAssetTx(
 
 export async function transferAssetTx(
   nodeBase: string,
-  privateKeyHex: string,
   address: string,
   params: {
     assetHash: string;
@@ -604,7 +593,6 @@ export async function transferAssetTx(
   const amountStr = String(params.amount).trim().replace(",", ".");
   return signAndSubmit(
     nodeBase,
-    privateKeyHex,
     address,
     (ctx, account) => {
       if (params.isLiquidity) {
@@ -625,7 +613,6 @@ export async function transferAssetTx(
 
 export async function limitSwapTx(
   nodeBase: string,
-  privateKeyHex: string,
   address: string,
   params: {
     assetHash: string;
@@ -654,7 +641,6 @@ export async function limitSwapTx(
 
   return signAndSubmit(
     nodeBase,
-    privateKeyHex,
     address,
     (ctx, account) => {
       if (params.isBuy) {
@@ -675,7 +661,6 @@ export async function limitSwapTx(
 
 export async function depositLiquidityTx(
   nodeBase: string,
-  privateKeyHex: string,
   address: string,
   params: {
     assetHash: string;
@@ -700,7 +685,6 @@ export async function depositLiquidityTx(
 
   return signAndSubmit(
     nodeBase,
-    privateKeyHex,
     address,
     (ctx, account) => ctx.depositLiquidity(account, hash, tokenAmount, wart),
     { fee: params.fee },
@@ -709,7 +693,6 @@ export async function depositLiquidityTx(
 
 export async function withdrawLiquidityTx(
   nodeBase: string,
-  privateKeyHex: string,
   address: string,
   params: { assetHash: string; shares: string; fee?: string },
 ) {
@@ -722,7 +705,6 @@ export async function withdrawLiquidityTx(
 
   return signAndSubmit(
     nodeBase,
-    privateKeyHex,
     address,
     (ctx, account) => ctx.withdrawLiquidity(account, hash, units),
     { fee: params.fee },
@@ -777,7 +759,6 @@ async function resolveOrderCancelTarget(
 
 export async function cancelOrderTx(
   nodeBase: string,
-  privateKeyHex: string,
   address: string,
   params: { orderTxHash: string; fee?: string },
 ) {
@@ -790,7 +771,6 @@ export async function cancelOrderTx(
 
   return signAndSubmit(
     nodeBase,
-    privateKeyHex,
     address,
     (ctx, account) =>
       ctx.cancelTransaction(account, target.cancelHeight, target.cancelNonceId),

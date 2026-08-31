@@ -7,6 +7,7 @@ import secp256k1 from "secp256k1";
 import { DEFAULT_TX_FEE } from "../config/network";
 import { isDefiNode, isMainnetNode, normalizeNodeUrl } from "./nodes";
 import { formatBalanceBreakdown } from "./balanceBreakdown";
+import { ensureHostPermission, hostPermissionError } from "./hostAccess";
 
 export type BalanceResult = {
   /** Total holdings (available + locked). Kept for backward compatibility. */
@@ -34,6 +35,9 @@ async function nodeGet<T = unknown>(
 ): Promise<T> {
   const base = normalizeNodeUrl(nodeBase);
   if (!base) throw new Error("Invalid node URL");
+  if (!(await ensureHostPermission(base))) {
+    throw new Error(hostPermissionError(base));
+  }
   const url = `${base}/${path.replace(/^\//, "")}`;
   const response = await fetch(url, {
     method: "GET",
@@ -59,6 +63,9 @@ async function nodePost<T = unknown>(
 ): Promise<T> {
   const base = normalizeNodeUrl(nodeBase);
   if (!base) throw new Error("Invalid node URL");
+  if (!(await ensureHostPermission(base))) {
+    throw new Error(hostPermissionError(base));
+  }
   const url = `${base}/${path.replace(/^\//, "")}`;
   const response = await fetch(url, {
     method: "POST",
@@ -340,9 +347,9 @@ function signTransfer(
  * - DeFi testnet: wartE8 + type wartTransfer (wartbunker / core-defi)
  */
 export async function sendWartTransfer(
-  params: SendWartParams,
+  params: Omit<SendWartParams, "privateKeyHex"> & { privateKeyHex?: string },
 ): Promise<SendWartResult> {
-  const { nodeBase, privateKeyHex, toAddress, amountWart } = params;
+  const { nodeBase, toAddress, amountWart } = params;
   const feeStr = String(params.feeWart ?? DEFAULT_TX_FEE).trim() || DEFAULT_TX_FEE;
   const amountE8 = wartToE8(amountWart);
   if (amountE8 <= 0n) throw new Error("Amount must be positive");
@@ -368,14 +375,17 @@ export async function sendWartTransfer(
   const pin = normalizeChainPin(headData);
   const nonceId = Number.isFinite(params.nonceId) ? Number(params.nonceId) : 0;
   const toAddr = parseRecipientAddress(toAddress);
-  const signature65 = signTransfer(
-    pin.pinHash,
-    pin.pinHeight,
-    nonceId,
-    feeE8,
-    toAddr,
-    amountE8,
-    privateKeyHex.replace(/^0x/i, ""),
+  const { runWithUnlockedPrivateKey } = await import("./signingBridge");
+  const signature65 = await runWithUnlockedPrivateKey((pk) =>
+    signTransfer(
+      pin.pinHash,
+      pin.pinHeight,
+      nonceId,
+      feeE8,
+      toAddr,
+      amountE8,
+      pk.replace(/^0x/i, ""),
+    ),
   );
 
   let postdata: Record<string, unknown>;

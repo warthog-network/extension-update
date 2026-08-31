@@ -137,9 +137,7 @@ function DefiHub() {
     selectedNodeUrl,
     nodeList,
     selectedNodeIndex,
-    getAccountFromIndex,
-    selectedWalletIndex,
-    privateKey,
+    signingUnlocked,
     enablePasskeyOnCurrentWallet,
   } = useWallet();
 
@@ -263,10 +261,10 @@ function DefiHub() {
 
   useEffect(() => {
     if (tab === "tools") void refreshPasskeyStatus();
-  }, [tab, refreshPasskeyStatus, wallet, privateKey]);
+  }, [tab, refreshPasskeyStatus, wallet, signingUnlocked]);
 
   const handleEnablePasskey = async (force2fa?: boolean) => {
-    if (!wallet || !privateKey) {
+    if (!wallet || !signingUnlocked) {
       setError("Unlock your wallet first");
       return;
     }
@@ -311,27 +309,6 @@ function DefiHub() {
   const patchNumPrefs = (patch: Partial<NumberDisplayPrefs>) => {
     setNumPrefs((prev) => saveNumberDisplayPrefs({ ...prev, ...patch }));
   };
-
-  const getPk = useCallback((): string => {
-    if (privateKey?.trim()) return privateKey.trim().replace(/^0x/i, "");
-    const acct = getAccountFromIndex(selectedWalletIndex) as unknown as {
-      getPrivateKeyHex?: () => string;
-      privateKeyHex?: string;
-    };
-    let pk = "";
-    try {
-      if (typeof acct.getPrivateKeyHex === "function") {
-        pk = acct.getPrivateKeyHex() || "";
-      }
-    } catch {
-      pk = "";
-    }
-    if (!pk && acct.privateKeyHex) pk = acct.privateKeyHex;
-    if (!pk) {
-      throw new Error("Wallet locked — unlock to sign DeFi transactions");
-    }
-    return String(pk).replace(/^0x/i, "");
-  }, [privateKey, getAccountFromIndex, selectedWalletIndex]);
 
   const clearMsg = () => {
     setStatus(null);
@@ -740,7 +717,6 @@ function DefiHub() {
             key={`dex-${dexPrefillKey}-${dexHash || "none"}`}
             nodeUrl={nodeUrl}
             wallet={wallet || ""}
-            getPk={getPk}
             fee={fee}
             onFeeChange={setFee}
             wartAvailable={wartAvailable}
@@ -1191,7 +1167,6 @@ function DefiHub() {
                                       try {
                                         const r = await cancelOrderTx(
                                           nodeUrl,
-                                          getPk(),
                                           wallet,
                                           { orderTxHash: tx, fee },
                                         );
@@ -1238,7 +1213,6 @@ function DefiHub() {
                                       try {
                                         const r = await cancelOrderTx(
                                           nodeUrl,
-                                          getPk(),
                                           wallet,
                                           { orderTxHash: tx, fee },
                                         );
@@ -1550,7 +1524,7 @@ function DefiHub() {
                     );
                   }
                   try {
-                    const r = await transferAssetTx(nodeUrl, getPk(), wallet, {
+                    const r = await transferAssetTx(nodeUrl, wallet, {
                       assetHash: sendHash,
                       toAddress: sendTo,
                       amount: sendAmount,
@@ -1641,7 +1615,7 @@ function DefiHub() {
                       if (!wallet || !nodeUrl) return;
                       const decRaw = parseInt(createDecimals, 10);
                       const decimals = Number.isFinite(decRaw) ? decRaw : 8;
-                      const r = await createAssetTx(nodeUrl, getPk(), wallet, {
+                      const r = await createAssetTx(nodeUrl, wallet, {
                         name: createName,
                         supply: createSupply,
                         decimals,
@@ -1906,7 +1880,7 @@ function DefiHub() {
           </div>
 
           {toolsSub === "passkey" &&
-            (wallet && privateKey ? (
+            (wallet && signingUnlocked ? (
             <section
               className="defi-section"
               style={{

@@ -12,11 +12,11 @@ function ImportPrivateKey() {
   const [busy, setBusy] = useState(false);
   const [showKey, setShowKey] = useState(false);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     setBusy(true);
     setError(null);
     try {
-      importPrivateKey(privateKey);
+      await importPrivateKey(privateKey);
       navigate("/set-password");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Invalid private key");

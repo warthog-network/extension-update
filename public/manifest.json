@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "WARTHOG NETWORK",
-  "version": "1.2.7",
+  "version": "1.2.8",
   "description": "Warthog Network browser wallet — mainnet + DeFi testnet support, secure WART transfers, and account management.",
   "icons": {
     "16": "/logo-16.png",
@@ -17,8 +17,20 @@
       "32": "/logo-32.png"
     }
   },
-  "permissions": ["tabs", "storage", "scripting", "activeTab", "cookies", "windows"],
-  "host_permissions": ["*://*/*", "<all_urls>"],
+  "permissions": ["storage", "windows"],
+  "host_permissions": [
+    "https://warthognode.duckdns.org/*",
+    "https://warthog-defitestnet.duckdns.org/*",
+    "https://warthog-defitestnet.duckdns.org:4445/*",
+    "https://wartscan.io/*",
+    "https://api.coingecko.com/*",
+    "https://api.coinpaprika.com/*",
+    "http://104.251.219.14:3001/*",
+    "http://65.87.7.86:3002/*",
+    "http://85.56.145.106:3001/*",
+    "http://209.127.34.202:3001/*"
+  ],
+  "optional_host_permissions": ["https://*/*", "http://*/*"],
   "options_page": "index.html",
   "homepage_url": "https://wartscan.io/",
   "browser_specific_settings": {
