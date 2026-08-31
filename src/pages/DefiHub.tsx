@@ -884,11 +884,8 @@ function DefiHub() {
                       setDropAssetIndex(null);
                     }}
                   >
-                    <div className="defi-row">
-                      <div
-                        className="defi-row"
-                        style={{ justifyContent: "flex-start", flex: 1 }}
-                      >
+                    <div className="defi-asset-head">
+                      <div className="defi-asset-id">
                         {assetBalances.length > 1 && (
                           <button
                             type="button"

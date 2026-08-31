@@ -157,12 +157,12 @@ const SpendableBalanceDisplay: React.FC<Props> = ({
         className={`${alignEnd ? "text-right" : "text-left"} font-mono text-sm tabular-nums min-w-0 max-w-full ${className}`.trim()}
       >
         <div
-          className={`flex items-baseline gap-1 min-w-0 ${
+          className={`flex items-baseline gap-1 min-w-0 max-w-full flex-wrap ${
             alignEnd ? "justify-end" : "justify-start"
           }`}
         >
           <span
-            className={`text-white break-all ${primaryClassName}`.trim()}
+            className={`text-white break-all min-w-0 ${primaryClassName}`.trim()}
             style={primaryColor ? { color: primaryColor } : undefined}
           >
             {fmt(free)}
