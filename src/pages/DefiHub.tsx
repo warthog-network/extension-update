@@ -1828,11 +1828,13 @@ function DefiHub() {
                 })}
                 {lookupResult != null && (
                   <>
-                    {lookupResult.hash ? (
+                    {(lookupResult as { hash?: string; name?: string }).hash ? (
                       <AssetChartPanel
                         nodeUrl={nodeUrl}
-                        hash={lookupResult.hash}
-                        assetName={lookupResult.name || "Asset"}
+                        hash={(lookupResult as { hash: string }).hash}
+                        assetName={
+                          (lookupResult as { name?: string }).name || "Asset"
+                        }
                       />
                     ) : null}
                     <pre className="defi-pre">
