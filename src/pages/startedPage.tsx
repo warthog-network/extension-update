@@ -66,7 +66,7 @@ function StartedPage() {
     have: "How do you want to restore access?",
     derive: "Enter the 12 or 24 word phrase for this wallet.",
     import: "Paste the 64-character private key.",
-    load: "Open an encrypted warthog_wallet.txt file.",
+    load: "Open an encrypted warthog_wallet.txt file, then name it to save in this extension.",
   };
 
   const showBack = path !== "hub";

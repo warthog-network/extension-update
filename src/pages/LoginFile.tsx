@@ -3,6 +3,15 @@ import { useNavigate } from "react-router-dom";
 import BackButton from "../components/BackButton";
 import Button from "../components/Button";
 import useWallet from "../hooks/useWallet";
+import { decryptWallet } from "../utils/warthogWalletCrypto";
+
+function suggestedWalletName(label: string): string {
+  const base = String(label || "")
+    .replace(/\.txt$/i, "")
+    .replace(/^warthog_wallet[_-]*/i, "")
+    .trim();
+  return base || "Imported";
+}
 
 /**
  * File login stays inside the extension popup.
@@ -10,7 +19,7 @@ import useWallet from "../hooks/useWallet";
  * use paste / clipboard / optional drag-and-drop of the encrypted text instead.
  */
 function LoginFile() {
-  const { loginFromEncrypted } = useWallet();
+  const { importWallet, importPrivateKey } = useWallet();
   const navigate = useNavigate();
   const [encryptedText, setEncryptedText] = useState("");
   const [walletLabel, setWalletLabel] = useState("Imported wallet");
@@ -27,7 +36,7 @@ function LoginFile() {
       return;
     }
     setEncryptedText(trimmed);
-    if (label) setWalletLabel(label.replace(/\.txt$/i, ""));
+    if (label) setWalletLabel(suggestedWalletName(label));
     setError(null);
   };
 
@@ -74,12 +83,19 @@ function LoginFile() {
       }
       if (!password) throw new Error("Please enter password");
 
-      await loginFromEncrypted(
-        encryptedText.trim(),
-        password,
-        walletLabel.trim() || "Imported wallet",
-      );
-      navigate("/home", { replace: true });
+      const decrypted = await decryptWallet(encryptedText.trim(), password);
+      if (decrypted.mnemonic) {
+        await importWallet(decrypted.mnemonic);
+      } else {
+        await importPrivateKey(decrypted.privateKey);
+      }
+      navigate("/secure-setup", {
+        replace: true,
+        state: {
+          origin: "restore",
+          walletName: suggestedWalletName(walletLabel),
+        },
+      });
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Login failed";
       setError(msg === "Invalid password" ? "Invalid password" : msg);
@@ -99,7 +115,8 @@ function LoginFile() {
           Open{" "}
           <span className="text-primary">warthog_wallet.txt</span> in any
           editor, copy all, then paste below. (File pickers close the extension
-          popup, so paste stays in-popup.)
+          popup, so paste stays in-popup.) After it unlocks, name it to save in
+          this extension.
         </p>
 
         <div
@@ -151,7 +168,9 @@ function LoginFile() {
         </div>
 
         <div>
-          <label className="text-white text-sm">Wallet name (optional)</label>
+          <label className="text-white text-sm">
+            Wallet name for this extension
+          </label>
           <input
             type="text"
             value={walletLabel}
@@ -193,7 +212,7 @@ function LoginFile() {
           onClick={handleLogin}
           disabled={busy || !encryptedText.trim() || !password}
         >
-          {busy ? "Unlocking…" : "Login"}
+          {busy ? "Unlocking…" : "Unlock file & continue"}
         </Button>
       </div>
     </div>
