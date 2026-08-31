@@ -34,7 +34,7 @@ interface Activity {
 }
 
 const App: React.FC = () => {
-  const { isAuthenticated, token, clearToken, seedPhrase } = useWallet();
+  const { isAuthenticated, seedPhrase } = useWallet();
   const [progress, setProgress] = useState(0);
   const [loading, setLoading] = useState(true);
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(
@@ -61,13 +61,6 @@ const App: React.FC = () => {
     const clear = startLoading();
     return clear;
   }, [startLoading]);
-
-  useEffect(() => {
-    if (isAuthenticated && !token) {
-      clearToken();
-      navigate("/locked");
-    }
-  }, [token, clearToken, navigate, isAuthenticated]);
 
   if (loading) return <Loading progress={progress} />;
 

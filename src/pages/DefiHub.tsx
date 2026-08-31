@@ -54,6 +54,7 @@ import {
 } from "../utils/numberDisplay";
 import TransactionHistoryPanel from "../components/TransactionHistoryPanel";
 import SwapDexPanel from "../components/SwapDexPanel";
+import SpendConfirm from "../components/SpendConfirm";
 import AssetMark, { AssetTitle } from "../components/AssetMark";
 import AssetChartPanel from "../components/AssetChartPanel";
 import {
@@ -195,6 +196,14 @@ function DefiHub() {
 
   // Assets create/search
   const [assetsSub, setAssetsSub] = useState<AssetsSub>("search");
+  const [showOverviewCharts, setShowOverviewCharts] = useState(() => {
+    try {
+      return localStorage.getItem("warthogShowOverviewCharts") === "1";
+    } catch {
+      return false;
+    }
+  });
+  const [sendAssetConfirm, setSendAssetConfirm] = useState(false);
   const [toolsSub, setToolsSub] = useState<ToolsSub>("passkey");
   const [showToolsMenu, setShowToolsMenu] = useState(false);
   const [createName, setCreateName] = useState("");
@@ -760,13 +769,13 @@ function DefiHub() {
 
           {/* Your Assets — collapsible bar (wartbunker / mobile overview) */}
           <section className="defi-section">
-            <button
-              type="button"
-              className="defi-section-header defi-section-header-toggle"
-              onClick={() => setShowAssets((v) => !v)}
-              aria-expanded={showAssets}
-            >
-              <div className="defi-section-header-left">
+            <div className="defi-section-header defi-section-header-toggle">
+              <button
+                type="button"
+                className="defi-section-header-left"
+                onClick={() => setShowAssets((v) => !v)}
+                aria-expanded={showAssets}
+              >
                 <span className="defi-section-chevron" aria-hidden="true">
                   {showAssets ? "▼" : "▶"}
                 </span>
@@ -778,13 +787,40 @@ function DefiHub() {
                     {assetBalances.length}
                   </span>
                 )}
+              </button>
+              <div className="flex items-center gap-2">
+                {showAssets ? (
+                  <button
+                    type="button"
+                    className={`defi-compact-btn ${
+                      showOverviewCharts ? "defi-compact-btn-active" : ""
+                    }`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowOverviewCharts((v) => {
+                        const next = !v;
+                        try {
+                          localStorage.setItem(
+                            "warthogShowOverviewCharts",
+                            next ? "1" : "0",
+                          );
+                        } catch {
+                          /* ignore */
+                        }
+                        return next;
+                      });
+                    }}
+                  >
+                    Charts
+                  </button>
+                ) : null}
+                {assetBalances.length > 1 && showAssets && (
+                  <span className="defi-hint mt-0 mb-0 text-[10px]">
+                    Drag ⋮⋮ to reorder
+                  </span>
+                )}
               </div>
-              {assetBalances.length > 1 && showAssets && (
-                <span className="defi-hint mt-0 mb-0 text-[10px]">
-                  Drag ⋮⋮ to reorder
-                </span>
-              )}
-            </button>
+            </div>
             {showAssets && (
             <div className="defi-section-body">
               {assetBalances.length === 0 ? (
@@ -930,11 +966,13 @@ function DefiHub() {
                         ×
                       </button>
                     </div>
-                    <AssetChartPanel
-                      nodeUrl={nodeUrl}
-                      hash={asset.hash}
-                      assetName={asset.name}
-                    />
+                    {showOverviewCharts ? (
+                      <AssetChartPanel
+                        nodeUrl={nodeUrl}
+                        hash={asset.hash}
+                        assetName={asset.name}
+                      />
+                    ) : null}
                   </div>
                 ))
               )}
@@ -1460,8 +1498,24 @@ function DefiHub() {
               type="button"
               className="defi-btn-primary"
               disabled={busy}
-              onClick={() =>
-                run(async () => {
+              onClick={() => setSendAssetConfirm(true)}
+            >
+              {busy ? "Sending…" : "Send Asset"}
+            </button>
+            <SpendConfirm
+              open={sendAssetConfirm}
+              title="Confirm send asset"
+              rows={[
+                { label: "Asset", value: sendName || sendHash || "—" },
+                { label: "To", value: sendTo || "—" },
+                { label: "Amount", value: sendAmount || "—" },
+                { label: "Fee", value: `${fee} WART` },
+              ]}
+              busy={busy}
+              onCancel={() => setSendAssetConfirm(false)}
+              onConfirm={() => {
+                setSendAssetConfirm(false);
+                void run(async () => {
                   if (!wallet || !nodeUrl) return;
                   if (!sendHash || !sendTo || !sendAmount) {
                     throw new Error(
@@ -1517,11 +1571,9 @@ function DefiHub() {
                       }),
                     );
                   }
-                })
-              }
-            >
-              {busy ? "Sending…" : "Send Asset"}
-            </button>
+                });
+              }}
+            />
           </div>
         </section>
       )}
@@ -1764,13 +1816,29 @@ function DefiHub() {
                           </button>
                         </div>
                       )}
+                      {hash ? (
+                        <AssetChartPanel
+                          nodeUrl={nodeUrl}
+                          hash={hash}
+                          assetName={asset.name || "Asset"}
+                        />
+                      ) : null}
                     </div>
                   );
                 })}
                 {lookupResult != null && (
-                  <pre className="defi-pre">
-                    {JSON.stringify(lookupResult, null, 2)}
-                  </pre>
+                  <>
+                    {lookupResult.hash ? (
+                      <AssetChartPanel
+                        nodeUrl={nodeUrl}
+                        hash={lookupResult.hash}
+                        assetName={lookupResult.name || "Asset"}
+                      />
+                    ) : null}
+                    <pre className="defi-pre">
+                      {JSON.stringify(lookupResult, null, 2)}
+                    </pre>
+                  </>
                 )}
               </div>
             </section>

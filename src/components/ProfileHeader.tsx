@@ -11,7 +11,7 @@ const ProfileHeader: React.FC = () => {
   const { selectedWalletIndex } = useWallet();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [menuPos, setMenuPos] = useState<MenuPos | null>(null);
-  const { name, clearToken } = useWallet();
+  const { name, lockSession } = useWallet();
   const navigate = useNavigate();
   const menuRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLDivElement>(null);
@@ -44,8 +44,7 @@ const ProfileHeader: React.FC = () => {
   };
 
   const handleLockScreen = () => {
-    clearToken();
-    navigate("/locked");
+    void lockSession().then(() => navigate("/login-saved"));
   };
 
   const go = (path: string) => {

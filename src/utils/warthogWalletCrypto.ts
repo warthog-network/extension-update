@@ -22,34 +22,133 @@ export type EncryptedWalletPayload = {
 
 const NAMED_PREFIX = "warthogWallet_";
 
+/** PBKDF2-SHA256 iterations — matches WartBunker v2. */
+export const WALLET_CRYPTO_VERSION = 2;
+const PBKDF2_ITERATIONS = 210_000;
+
+function encryptV2(plaintext: string, password: string): string {
+  const salt = CryptoJS.lib.WordArray.random(16);
+  const iv = CryptoJS.lib.WordArray.random(16);
+  const key = CryptoJS.PBKDF2(String(password), salt, {
+    keySize: 256 / 32,
+    iterations: PBKDF2_ITERATIONS,
+    hasher: CryptoJS.algo.SHA256,
+  });
+  const encrypted = CryptoJS.AES.encrypt(plaintext, key, {
+    iv,
+    mode: CryptoJS.mode.CBC,
+    padding: CryptoJS.pad.Pkcs7,
+  });
+  return JSON.stringify({
+    v: WALLET_CRYPTO_VERSION,
+    kdf: "pbkdf2-sha256",
+    iter: PBKDF2_ITERATIONS,
+    salt: CryptoJS.enc.Base64.stringify(salt),
+    iv: CryptoJS.enc.Base64.stringify(iv),
+    ct: CryptoJS.enc.Base64.stringify(encrypted.ciphertext),
+  });
+}
+
+function decryptV2(envelope: {
+  iter?: number;
+  salt: string;
+  iv: string;
+  ct: string;
+}, password: string): EncryptedWalletPayload {
+  const iterations =
+    Number(envelope.iter) > 0 ? Number(envelope.iter) : PBKDF2_ITERATIONS;
+  const salt = CryptoJS.enc.Base64.parse(envelope.salt);
+  const iv = CryptoJS.enc.Base64.parse(envelope.iv);
+  const ciphertext = CryptoJS.enc.Base64.parse(envelope.ct);
+  const key = CryptoJS.PBKDF2(String(password), salt, {
+    keySize: 256 / 32,
+    iterations,
+    hasher: CryptoJS.algo.SHA256,
+  });
+  const decrypted = CryptoJS.AES.decrypt({ ciphertext } as CryptoJS.lib.CipherParams, key, {
+    iv,
+    mode: CryptoJS.mode.CBC,
+    padding: CryptoJS.pad.Pkcs7,
+  });
+  const decryptedStr = decrypted.toString(CryptoJS.enc.Utf8);
+  if (!decryptedStr) throw new Error("Invalid password");
+  return JSON.parse(decryptedStr) as EncryptedWalletPayload;
+}
+
+function decryptLegacyOpenSsl(
+  encrypted: string,
+  password: string,
+): EncryptedWalletPayload {
+  const bytes = CryptoJS.AES.decrypt(encrypted, password);
+  const decryptedStr = bytes.toString(CryptoJS.enc.Utf8);
+  if (!decryptedStr) throw new Error("Invalid password");
+  return JSON.parse(decryptedStr) as EncryptedWalletPayload;
+}
+
 export function encryptWallet(
   walletData: EncryptedWalletPayload,
   password: string,
 ): string {
+  if (!password) throw new Error("Password is required");
   const { privateKey, publicKey, address, mnemonic } = walletData;
-  return CryptoJS.AES.encrypt(
+  return encryptV2(
     JSON.stringify({ privateKey, publicKey, address, mnemonic }),
     password,
-  ).toString();
+  );
 }
 
 /**
  * Decrypt a password ciphertext or a multi-auth envelope (password field).
+ * Supports WartBunker v2 PBKDF2 envelopes and legacy CryptoJS OpenSSL blobs.
  */
 export function decryptWallet(
   encrypted: string,
   password: string,
 ): EncryptedWalletPayload {
-  const cipher = getPasswordCipherFromBlob(encrypted);
+  if (!password) throw new Error("Invalid password");
+  const raw = String(encrypted ?? "").trim();
+  if (!raw) throw new Error("Invalid password");
+
+  const cipher = getPasswordCipherFromBlob(raw);
   if (!cipher) {
     throw new Error(
       "This wallet has no password unlock — use passkey, or re-save with a password",
     );
   }
-  const bytes = CryptoJS.AES.decrypt(cipher, password);
-  const decryptedStr = bytes.toString(CryptoJS.enc.Utf8);
-  if (!decryptedStr) throw new Error("Invalid password");
-  const parsed = JSON.parse(decryptedStr) as EncryptedWalletPayload;
+
+  const inner = String(cipher).trim();
+  if (inner.startsWith("{")) {
+    try {
+      const envelope = JSON.parse(inner) as {
+        v?: number;
+        ct?: string;
+        salt?: string;
+        iv?: string;
+        iter?: number;
+      };
+      if (
+        envelope &&
+        Number(envelope.v) === 2 &&
+        envelope.ct &&
+        envelope.salt &&
+        envelope.iv
+      ) {
+        const parsed = decryptV2(
+          envelope as { salt: string; iv: string; ct: string; iter?: number },
+          password,
+        );
+        if (!parsed?.privateKey || !parsed?.address) {
+          throw new Error("Invalid wallet file");
+        }
+        return parsed;
+      }
+    } catch (err) {
+      if (err instanceof Error && err.message === "Invalid password") throw err;
+      if (!(err instanceof SyntaxError)) throw err;
+    }
+  }
+
+  const parsed = decryptLegacyOpenSsl(inner, password);
   if (!parsed?.privateKey || !parsed?.address) {
     throw new Error("Invalid wallet file");
   }

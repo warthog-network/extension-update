@@ -21,6 +21,7 @@ import {
   withdrawLiquidityTx,
   type DefiAssetBalance,
 } from "../utils/defiClient";
+import SpendConfirm from "./SpendConfirm";
 
 const DEFAULT_MARKET_SLIPPAGE_PCT = 5;
 
@@ -103,6 +104,7 @@ export default function SwapDexPanel({
   onAssetChange,
   initialMode = "market",
 }: Props) {
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const [orderMode, setOrderMode] = useState<SwapOrderMode>(initialMode);
   const [payingWart, setPayingWart] = useState(true);
   const [selectedAsset, setSelectedAsset] = useState<TokenOption | null>(null);
@@ -436,7 +438,7 @@ export default function SwapDexPanel({
     setError(null);
   };
 
-  const handleSwap = async () => {
+  const handleSwap = async (confirmed = false) => {
     if (!assetHash || !isValidAssetHash(assetHash)) {
       setError("Select a token to swap");
       return;
@@ -471,6 +473,11 @@ export default function SwapDexPanel({
       priceForEncode = payingWart ? m.spot * (1 + slip) : m.spot * (1 - slip);
     }
 
+    if (!confirmed) {
+      setConfirmOpen(true);
+      return;
+    }
+    setConfirmOpen(false);
     setBusy(true);
     setError(null);
     setStatus(null);
@@ -1123,7 +1130,7 @@ export default function SwapDexPanel({
 
             <button
               type="button"
-              onClick={() => void handleSwap()}
+              onClick={() => void handleSwap(false)}
               disabled={swapDisabled || ctaBlocked}
               className="swap-cta-btn"
             >
@@ -1327,6 +1334,19 @@ export default function SwapDexPanel({
           </div>
         </div>
       )}
+      <SpendConfirm
+        open={confirmOpen}
+        title="Confirm swap"
+        rows={[
+          { label: "Token", value: selectedAsset?.symbol || assetHash || "—" },
+          { label: "Amount", value: `${payAmount || "—"} ${payingWart ? "WART" : selectedAsset?.symbol || "token"}` },
+          { label: "Fee", value: `${fee} WART` },
+          { label: "Mode", value: orderMode },
+        ]}
+        busy={busy}
+        onCancel={() => setConfirmOpen(false)}
+        onConfirm={() => void handleSwap(true)}
+      />
     </div>
   );
 }

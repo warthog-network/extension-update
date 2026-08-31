@@ -85,6 +85,8 @@ interface WalletContextProps {
   token: string | null;
   setToken: (token: string) => void;
   clearToken: () => void;
+  /** Wipe in-memory keys and session token. Named encrypted wallets stay on disk. */
+  lockSession: () => Promise<void>;
   accountPath: (index: number) => string;
   newWallet: (wordCount?: WordCount, pathType?: PathType) => Promise<void>;
   addAccount: (name: string | null) => void;
@@ -249,7 +251,6 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({
 
   const setPrivateKey = (pk: string | null): void => {
     setPrivateKeyState(pk);
-    saveToBrowserStorage("privateKey", pk);
   };
 
   const setPathType = (pt: PathType): void => {
@@ -259,7 +260,6 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({
 
   const setSeedPhrase = (seed: string | null): void => {
     setSeedPhraseState(seed);
-    saveToBrowserStorage("seedPhrase", seed);
   };
 
   const setWallet = (w: string): void => {
@@ -299,7 +299,6 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({
 
   const setPassword = (pwd: string): void => {
     setPasswordState(pwd);
-    saveToBrowserStorage("password", pwd);
   };
 
   const setName = (n: string): void => {
@@ -314,7 +313,6 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({
 
   const setInputWordsBackup = (words: string[]): void => {
     setInputWordsBackupState(words);
-    saveToBrowserStorage("inputWordsBackup", words.join(","));
   };
 
   /** Apply key material into session + storage (used by create / import / login). */
@@ -354,10 +352,9 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({
       setTokenState(sessionToken);
     }
 
-    // Persist fully before opening another window (file-login flow)
+    // Persist public session only. Seed / private key / password stay in memory
+    // until lock — they are not wrapped with a bundled storage key.
     await Promise.all([
-      saveToBrowserStorage("seedPhrase", data.mnemonic || null),
-      saveToBrowserStorage("privateKey", data.privateKey),
       saveToBrowserStorage("wallet", data.address),
       saveToBrowserStorage("walletList", data.address),
       saveToBrowserStorage("nameList", accountName),
@@ -368,9 +365,6 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({
       saveToBrowserStorage("nodeList", defaultNodeList.join(",")),
       saveToBrowserStorage("nodeNameList", defaultNodeNameList.join(",")),
       saveToBrowserStorage("selectedNodeIndex", String(DEFAULT_NODE_INDEX)),
-      opts?.password
-        ? saveToBrowserStorage("password", opts.password)
-        : Promise.resolve(),
       sessionToken
         ? saveToBrowserStorage("token", sessionToken)
         : Promise.resolve(),
@@ -647,12 +641,31 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({
     setTokenState(null);
     browser.storage.local
       .remove(["token", "tokenExpiration"])
-      .then(() => {
-        console.log("Token and token expiration removed");
-      })
       .catch((error: unknown) => {
         console.error("Error removing token and token expiration:", error);
       });
+  };
+
+  const SECRET_STORAGE_KEYS = [
+    "privateKey",
+    "seedPhrase",
+    "password",
+    "inputWordsBackup",
+    "token",
+    "tokenExpiration",
+  ] as const;
+
+  const lockSession = async (): Promise<void> => {
+    setSeedPhraseState(null);
+    setPrivateKeyState(null);
+    setPasswordState(null);
+    setTokenState(null);
+    setInputWordsBackupState([]);
+    try {
+      await browser.storage.local.remove([...SECRET_STORAGE_KEYS]);
+    } catch (error: unknown) {
+      console.error("Error wiping session secrets:", error);
+    }
   };
 
   const getAccountFromIndex = (index: number): Account => {
@@ -693,8 +706,14 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({
   };
 
   useEffect(() => {
-    loadFromChromeStorage("seedPhrase", setSeedPhraseState);
-    loadFromChromeStorage("privateKey", setPrivateKeyState);
+    // Drop any leftover secrets from older builds that wrapped keys with a
+    // bundled storage password. Named warthogWallet_* envelopes are untouched.
+    void browser.storage.local.remove([
+      "privateKey",
+      "seedPhrase",
+      "password",
+      "inputWordsBackup",
+    ]);
     loadFromChromeStorage("wallet", setWalletState);
     loadFromChromeStorage("pathType", (pt) => {
       if (pt === "hardened" || pt === "non-hardened") {
@@ -782,9 +801,7 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({
       : null;
   const selectedNetworkLabel = networkLabel(selectedNodeUrl);
   // Password or session token (passkey-only unlock sets token without password)
-  const isAuthenticated = Boolean(
-    wallet && (password || token) && (seedPhrase || privateKey),
-  );
+  const isAuthenticated = Boolean(wallet && (seedPhrase || privateKey));
   const canAddAccounts = Boolean(seedPhrase);
 
   return (
@@ -827,6 +844,7 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({
         clearWalletData,
         setToken,
         clearToken,
+        lockSession,
         newWallet,
         addAccount,
         setWalletListState,
