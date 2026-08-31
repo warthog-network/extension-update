@@ -3,6 +3,7 @@ import { ensureHostPermission } from "./hostAccess";
 
 /** Off-chain catalog (same VPS as WartBunker). */
 export const METADATA_BASE = "https://warthog-defitestnet.duckdns.org:4445";
+export const ZERO_ASSET_HASH = "0".repeat(64);
 
 export type AssetMetadata = {
   hash: string;

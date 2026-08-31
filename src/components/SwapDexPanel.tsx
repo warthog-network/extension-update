@@ -22,6 +22,36 @@ import {
   type DefiAssetBalance,
 } from "../utils/defiClient";
 import SpendConfirm from "./SpendConfirm";
+import AssetMark, { AssetTitle } from "./AssetMark";
+import {
+  assetDisplayTicker,
+  useAssetMetadata,
+  ZERO_ASSET_HASH,
+} from "../utils/assetMetadata";
+
+function SwapTokenFace({
+  hash,
+  name,
+  fallback,
+}: {
+  hash?: string;
+  name?: string;
+  fallback: string;
+}) {
+  const meta = useAssetMetadata(hash);
+  const ticker = (hash ? assetDisplayTicker(name, meta) : "") || fallback;
+  return (
+    <>
+      <AssetMark
+        hash={hash || ""}
+        name={name || ticker}
+        size="xs"
+        round
+      />
+      <span>{ticker}</span>
+    </>
+  );
+}
 
 const DEFAULT_MARKET_SLIPPAGE_PCT = 5;
 
@@ -622,14 +652,19 @@ export default function SwapDexPanel({
     return payingWart ? "Place buy limit" : "Place sell limit";
   })();
 
-  const pairLabel = selectedAsset?.symbol
+  const selectedMeta = useAssetMetadata(selectedAsset?.hash);
+  const selectedTicker =
+    assetDisplayTicker(selectedAsset?.symbol || selectedAsset?.name, selectedMeta) ||
+    selectedAsset?.symbol ||
+    "token";
+  const pairLabel = selectedAsset
     ? payingWart
-      ? `WART → ${selectedAsset.symbol}`
-      : `${selectedAsset.symbol} → WART`
+      ? `WART → ${selectedTicker}`
+      : `${selectedTicker} → WART`
     : "Pick a token";
 
-  const poolPairLabel = selectedAsset?.symbol
-    ? `${selectedAsset.symbol} / WART pool`
+  const poolPairLabel = selectedAsset
+    ? `${selectedTicker} / WART pool`
     : "Pick a token for the pool";
 
   const ctaBlocked =
@@ -720,10 +755,11 @@ export default function SwapDexPanel({
                   onClick={() => setShowTokenPicker(true)}
                   className="swap-token-btn"
                 >
-                  <span className="w-6 h-6 rounded-full bg-zinc-700 text-zinc-200 text-xs font-bold flex items-center justify-center">
-                    {(selectedAsset?.symbol || "?")[0]}
-                  </span>
-                  <span>{selectedAsset?.symbol || "Select"}</span>
+                  <SwapTokenFace
+                    hash={selectedAsset?.hash}
+                    name={selectedAsset?.symbol}
+                    fallback="Select"
+                  />
                   <span className="text-zinc-500 text-xs">▾</span>
                 </button>
                 <input
@@ -760,7 +796,7 @@ export default function SwapDexPanel({
                     <div className="flex items-center justify-between mb-2.5">
                       <span className="text-xs text-zinc-500">You deposit</span>
                       <span className="text-[10px] text-zinc-600">
-                        {selectedAsset?.symbol || "Asset"}
+                        {selectedTicker === "token" ? "Asset" : selectedTicker}
                       </span>
                     </div>
                     <div className="swap-amount-row">
@@ -778,10 +814,11 @@ export default function SwapDexPanel({
                         onClick={() => setShowTokenPicker(true)}
                         className="swap-token-btn"
                       >
-                        <span className="w-6 h-6 rounded-full bg-zinc-700 text-zinc-200 text-xs font-bold flex items-center justify-center">
-                          {(selectedAsset?.symbol || "?")[0]}
-                        </span>
-                        <span>{selectedAsset?.symbol || "Select"}</span>
+                        <SwapTokenFace
+                          hash={selectedAsset?.hash}
+                          name={selectedAsset?.symbol}
+                          fallback="Select"
+                        />
                       </button>
                     </div>
                   </div>
@@ -811,12 +848,11 @@ export default function SwapDexPanel({
                         />
                       </div>
                       <div className="swap-token-static flex items-center gap-2 px-3 py-2 rounded-full bg-zinc-950/80 border border-zinc-700/80">
-                        <span className="w-6 h-6 rounded-full bg-zinc-700 text-zinc-200 text-xs font-bold flex items-center justify-center">
-                          W
-                        </span>
-                        <span className="font-semibold text-zinc-100 text-sm">
-                          WART
-                        </span>
+                        <SwapTokenFace
+                          hash={ZERO_ASSET_HASH}
+                          name="WART"
+                          fallback="WART"
+                        />
                       </div>
                     </div>
                   </div>
@@ -969,12 +1005,11 @@ export default function SwapDexPanel({
                   </button>
                   {payingWart ? (
                     <div className="swap-token-static flex items-center gap-2 px-3 py-2 rounded-full bg-zinc-950/80 border border-zinc-700/80">
-                      <span className="w-6 h-6 rounded-full bg-zinc-700 text-zinc-200 text-xs font-bold flex items-center justify-center">
-                        W
-                      </span>
-                      <span className="font-semibold text-zinc-100 text-sm">
-                        WART
-                      </span>
+                      <SwapTokenFace
+                        hash={ZERO_ASSET_HASH}
+                        name="WART"
+                        fallback="WART"
+                      />
                     </div>
                   ) : (
                     <button
@@ -982,10 +1017,11 @@ export default function SwapDexPanel({
                       onClick={() => setShowTokenPicker(true)}
                       className="swap-token-btn"
                     >
-                      <span className="w-6 h-6 rounded-full bg-zinc-700 text-zinc-200 text-xs font-bold flex items-center justify-center">
-                        {(selectedAsset?.symbol || "?")[0]}
-                      </span>
-                      <span>{selectedAsset?.symbol || "Select"}</span>
+                      <SwapTokenFace
+                        hash={selectedAsset?.hash}
+                        name={selectedAsset?.symbol}
+                        fallback="Select"
+                      />
                       <span className="text-zinc-500 text-xs">▾</span>
                     </button>
                   )}
@@ -1043,12 +1079,11 @@ export default function SwapDexPanel({
                   </div>
                   {!payingWart ? (
                     <div className="swap-token-static flex items-center gap-2 px-3 py-2 rounded-full bg-zinc-950/80 border border-zinc-700/80">
-                      <span className="w-6 h-6 rounded-full bg-zinc-700 text-zinc-200 text-xs font-bold flex items-center justify-center">
-                        W
-                      </span>
-                      <span className="font-semibold text-zinc-100 text-sm">
-                        WART
-                      </span>
+                      <SwapTokenFace
+                        hash={ZERO_ASSET_HASH}
+                        name="WART"
+                        fallback="WART"
+                      />
                     </div>
                   ) : (
                     <button
@@ -1056,10 +1091,11 @@ export default function SwapDexPanel({
                       onClick={() => setShowTokenPicker(true)}
                       className="swap-token-btn"
                     >
-                      <span className="w-6 h-6 rounded-full bg-zinc-700 text-zinc-200 text-xs font-bold flex items-center justify-center">
-                        {(selectedAsset?.symbol || "?")[0]}
-                      </span>
-                      <span>{selectedAsset?.symbol || "Select"}</span>
+                      <SwapTokenFace
+                        hash={selectedAsset?.hash}
+                        name={selectedAsset?.symbol}
+                        fallback="Select"
+                      />
                       <span className="text-zinc-500 text-xs">▾</span>
                     </button>
                   )}
@@ -1072,7 +1108,7 @@ export default function SwapDexPanel({
                 <label className="text-xs text-zinc-500 block mb-2">
                   Limit price{" "}
                   <span className="text-zinc-600">
-                    (WART per {selectedAsset?.symbol || "token"})
+                    (WART per {selectedTicker})
                   </span>
                 </label>
                 <div className="swap-amount-row">
@@ -1114,7 +1150,7 @@ export default function SwapDexPanel({
                   <span>Your limit</span>
                   <span className="text-zinc-400 tabular-nums shrink-0">
                     {formatSpot(effectiveLimitPrice)} /{" "}
-                    {selectedAsset?.symbol || "token"}
+                    {selectedTicker}
                   </span>
                 </div>
               )}
@@ -1310,12 +1346,15 @@ export default function SwapDexPanel({
                     onClick={() => selectToken(t)}
                   >
                     <span className="flex items-center gap-2 min-w-0">
-                      <span className="w-7 h-7 rounded-full bg-zinc-700 text-zinc-200 text-xs font-bold flex items-center justify-center shrink-0">
-                        {t.symbol[0]}
-                      </span>
+                      <AssetMark
+                        hash={t.hash}
+                        name={t.symbol}
+                        size="sm"
+                        round
+                      />
                       <span className="min-w-0 text-left">
                         <span className="block text-sm font-semibold text-zinc-100 truncate">
-                          {t.symbol}
+                          <AssetTitle hash={t.hash} name={t.symbol} />
                         </span>
                         <span className="block text-[10px] text-zinc-600 font-mono truncate">
                           {t.hash.slice(0, 10)}…
@@ -1336,8 +1375,8 @@ export default function SwapDexPanel({
         open={confirmOpen}
         title="Confirm swap"
         rows={[
-          { label: "Token", value: selectedAsset?.symbol || assetHash || "—" },
-          { label: "Amount", value: `${payAmount || "—"} ${payingWart ? "WART" : selectedAsset?.symbol || "token"}` },
+          { label: "Token", value: selectedTicker || assetHash || "—" },
+          { label: "Amount", value: `${payAmount || "—"} ${payingWart ? "WART" : selectedTicker}` },
           { label: "Fee", value: `${fee} WART` },
           { label: "Mode", value: orderMode },
         ]}

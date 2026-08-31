@@ -6,16 +6,18 @@ import {
   useAssetMetadata,
 } from "../utils/assetMetadata";
 
-type Size = "sm" | "md";
+type Size = "xs" | "sm" | "md";
 
 export default function AssetMark({
   hash,
   name,
   size = "md",
+  round = false,
 }: {
   hash: string;
   name?: string;
   size?: Size;
+  round?: boolean;
 }) {
   const meta = useAssetMetadata(hash);
   const urls = useMemo(() => {
@@ -41,7 +43,9 @@ export default function AssetMark({
 
   return (
     <div
-      className={`defi-avatar defi-avatar-blue ${size === "sm" ? "defi-avatar-sm" : ""}`}
+      className={`defi-avatar defi-avatar-blue${
+        size === "xs" ? " defi-avatar-xs" : size === "sm" ? " defi-avatar-sm" : ""
+      }${round ? " defi-avatar-round" : ""}`}
       title={assetDisplayName(name, meta)}
     >
       {src ? (

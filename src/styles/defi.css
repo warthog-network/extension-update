@@ -340,6 +340,15 @@
   font-size: 0.75rem;
   border-radius: 8px;
 }
+.defi-avatar-xs {
+  width: 22px;
+  height: 22px;
+  font-size: 0.65rem;
+  border-radius: 999px;
+}
+.defi-avatar-round {
+  border-radius: 999px;
+}
 .defi-asset-chart {
   width: 100%;
   min-width: 0;
