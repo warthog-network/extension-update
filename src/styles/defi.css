@@ -255,6 +255,9 @@
   padding: 0.7rem;
   margin-bottom: 0.45rem;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
 }
 .defi-card-inset {
   background: var(--defi-card);
@@ -321,7 +324,10 @@
   border-radius: 8px;
 }
 .defi-asset-chart {
+  width: 100%;
+  min-width: 0;
   margin-top: 0.5rem;
+  flex: 0 0 auto;
 }
 .defi-avatar-blue {
   background: #2563eb;

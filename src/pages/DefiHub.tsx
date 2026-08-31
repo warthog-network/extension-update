@@ -194,13 +194,49 @@ function DefiHub() {
 
   // Assets create/search
   const [assetsSub, setAssetsSub] = useState<AssetsSub>("search");
-  const [showOverviewCharts, setShowOverviewCharts] = useState(() => {
+  const [openAssetCharts, setOpenAssetCharts] = useState<Set<string>>(() => {
     try {
-      return localStorage.getItem("warthogShowOverviewCharts") === "1";
+      const raw = localStorage.getItem("warthogAssetCharts");
+      const arr = raw ? JSON.parse(raw) : [];
+      return new Set(
+        Array.isArray(arr) ? arr.map((h: unknown) => String(h).toLowerCase()) : [],
+      );
     } catch {
-      return false;
+      return new Set();
     }
   });
+  const persistAssetCharts = (next: Set<string>) => {
+    try {
+      localStorage.setItem("warthogAssetCharts", JSON.stringify([...next]));
+    } catch {
+      /* ignore */
+    }
+  };
+  const chartKey = (hash: string) => hash.replace(/^0x/i, "").toLowerCase();
+  const toggleAssetChart = (hash: string) => {
+    const key = chartKey(hash);
+    if (!key) return;
+    setOpenAssetCharts((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      persistAssetCharts(next);
+      return next;
+    });
+  };
+  const chartOpen = (hash: string) => openAssetCharts.has(chartKey(hash));
+  const toggleAllAssetCharts = (hashes: string[]) => {
+    const keys = hashes.map(chartKey).filter(Boolean);
+    if (!keys.length) return;
+    setOpenAssetCharts((prev) => {
+      const next = new Set(prev);
+      const anyOpen = keys.some((k) => next.has(k));
+      if (anyOpen) keys.forEach((k) => next.delete(k));
+      else keys.forEach((k) => next.add(k));
+      persistAssetCharts(next);
+      return next;
+    });
+  };
   const [sendAssetConfirm, setSendAssetConfirm] = useState(false);
   const [toolsSub, setToolsSub] = useState<ToolsSub>("passkey");
   const [showToolsMenu, setShowToolsMenu] = useState(false);
@@ -765,26 +801,17 @@ function DefiHub() {
                 )}
               </button>
               <div className="flex items-center gap-2">
-                {showAssets ? (
+                {showAssets && assetBalances.length > 0 ? (
                   <button
                     type="button"
                     className={`defi-compact-btn ${
-                      showOverviewCharts ? "defi-compact-btn-active" : ""
+                      assetBalances.some((a) => chartOpen(a.hash))
+                        ? "defi-compact-btn-active"
+                        : ""
                     }`}
                     onClick={(e) => {
                       e.stopPropagation();
-                      setShowOverviewCharts((v) => {
-                        const next = !v;
-                        try {
-                          localStorage.setItem(
-                            "warthogShowOverviewCharts",
-                            next ? "1" : "0",
-                          );
-                        } catch {
-                          /* ignore */
-                        }
-                        return next;
-                      });
+                      toggleAllAssetCharts(assetBalances.map((a) => a.hash));
                     }}
                   >
                     Charts
@@ -935,6 +962,15 @@ function DefiHub() {
                       </button>
                       <button
                         type="button"
+                        className={`defi-compact-btn ${
+                          chartOpen(asset.hash) ? "defi-compact-btn-active" : ""
+                        }`}
+                        onClick={() => toggleAssetChart(asset.hash)}
+                      >
+                        Chart
+                      </button>
+                      <button
+                        type="button"
                         className="defi-compact-btn defi-danger"
                         onClick={() => removeWatched(asset.hash)}
                         title="Remove"
@@ -942,7 +978,7 @@ function DefiHub() {
                         ×
                       </button>
                     </div>
-                    {showOverviewCharts ? (
+                    {chartOpen(asset.hash) ? (
                       <AssetChartPanel
                         nodeUrl={nodeUrl}
                         hash={asset.hash}
@@ -1715,6 +1751,29 @@ function DefiHub() {
                 >
                   Lookup hash
                 </button>
+                {searchResults.length > 0 ? (
+                  <div className="defi-btn-row mt-2">
+                    <button
+                      type="button"
+                      className={`defi-compact-btn ${
+                        searchResults.some((a) =>
+                          chartOpen(String(a.hash || a.assetHash || "")),
+                        )
+                          ? "defi-compact-btn-active"
+                          : ""
+                      }`}
+                      onClick={() =>
+                        toggleAllAssetCharts(
+                          searchResults
+                            .map((a) => String(a.hash || a.assetHash || ""))
+                            .filter(Boolean),
+                        )
+                      }
+                    >
+                      Charts
+                    </button>
+                  </div>
+                ) : null}
                 {searchResults.map((asset, i) => {
                   const hash = asset.hash || asset.assetHash || "";
                   const tracked = hash ? isTracked(hash) : false;
@@ -1788,9 +1847,18 @@ function DefiHub() {
                           >
                             DEX
                           </button>
+                          <button
+                            type="button"
+                            className={`defi-compact-btn ${
+                              chartOpen(hash) ? "defi-compact-btn-active" : ""
+                            }`}
+                            onClick={() => toggleAssetChart(hash)}
+                          >
+                            Chart
+                          </button>
                         </div>
                       )}
-                      {hash ? (
+                      {hash && chartOpen(hash) ? (
                         <AssetChartPanel
                           nodeUrl={nodeUrl}
                           hash={hash}
@@ -1802,7 +1870,32 @@ function DefiHub() {
                 })}
                 {lookupResult != null && (
                   <>
+                    <pre className="defi-pre">
+                      {JSON.stringify(lookupResult, null, 2)}
+                    </pre>
                     {(lookupResult as { hash?: string; name?: string }).hash ? (
+                      <div className="defi-btn-row mt-2">
+                        <button
+                          type="button"
+                          className={`defi-compact-btn ${
+                            chartOpen(
+                              (lookupResult as { hash: string }).hash,
+                            )
+                              ? "defi-compact-btn-active"
+                              : ""
+                          }`}
+                          onClick={() =>
+                            toggleAssetChart(
+                              (lookupResult as { hash: string }).hash,
+                            )
+                          }
+                        >
+                          Chart
+                        </button>
+                      </div>
+                    ) : null}
+                    {(lookupResult as { hash?: string }).hash &&
+                    chartOpen((lookupResult as { hash: string }).hash) ? (
                       <AssetChartPanel
                         nodeUrl={nodeUrl}
                         hash={(lookupResult as { hash: string }).hash}
@@ -1811,9 +1904,6 @@ function DefiHub() {
                         }
                       />
                     ) : null}
-                    <pre className="defi-pre">
-                      {JSON.stringify(lookupResult, null, 2)}
-                    </pre>
                   </>
                 )}
               </div>
